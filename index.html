@@ -2701,20 +2701,36 @@ document.getElementById('simpleConfDisplay').addEventListener('input', (e) => {
 // Smart sport detection from bet name
 const SPORT_PATTERNS = {
     'Tennis': [
-        /jeux/i, /sets?/i, /ace/i, /tie[\s-]?break/i, /double faute/i,
+        /jeux?/i, /sets?/i, /ace/i, /tie[\s-]?break/i, /double faute/i,
         /service/i, /atp/i, /wta/i, /roland[\s-]?garros/i, /wimbledon/i,
         /us[\s-]?open/i, /open[\s-]?australi/i, /nadal/i, /djokovic/i,
         /federer/i, /sinner/i, /alcaraz/i, /swiatek/i, /sabalenka/i,
         /\+\d+\.?\d*\s*jeux/i, /\-\d+\.?\d*\s*jeux/i,
-        /\d+[.,]\d+\s*jeux/i
+        /\d+[.,]\d+\s*jeux/i,
+        /points?\s*(joueur|gagnant|perdant)/i, /\d+[\.,]\d+\s*points/i,
+        /[eé]galit[eé]/i, /avantage/i, /break/i, /game/i,
+        /match\s*en\s*\d\s*sets?/i, /tie\s*break/i, /super\s*tie/i,
+        /\d+\s*[eè]me\s*set/i, /1er\s*set/i, /2[eè]me\s*set/i,
+        /nombre\s*de\s*(jeux|sets|games)/i, /total\s*(jeux|games)/i,
+        /\+\d+[\.,]\d*\s*games?/i, /\-\d+[\.,]\d*\s*games?/i,
+        /medvedev/i, /rublev/i, /tsitsipas/i, /zverev/i, /ruud/i,
+        /gauff/i, /rybakina/i, /pegula/i, /challenger/i
     ],
     'Basketball': [
-        /points?/i, /mi[\s-]?temps/i, /nba/i, /euroleague/i, /ncaa/i,
+        /points?/i, /pts/i, /mi[\s-]?temps/i, /nba/i, /euroleague/i, /ncaa/i,
         /rebond/i, /assist/i, /panier/i, /lancer/i, /dunk/i,
         /quarter/i, /quart[\s-]?temps/i, /overtime/i, /prolongation/i,
         /lakers/i, /celtics/i, /warriors/i, /bucks/i,
         /\+\d+\.?\d*\s*points?/i, /\-\d+\.?\d*\s*points?/i,
-        /\d+[.,]\d+\s*points?/i, /handicap.*\d+/i
+        /\d+[.,]\d+\s*points?/i, /handicap.*\d+/i,
+        /\+\d+[\.,]\d*\s*pts/i, /\-\d+[\.,]\d*\s*pts/i,
+        /total\s*(pts|points)/i, /over.*\d+.*pts/i, /under.*\d+.*pts/i,
+        /triple[\s-]?double/i, /double[\s-]?double/i,
+        /3[\s-]?points?/i, /trois[\s-]?points?/i,
+        /interception/i, /contre/i, /block/i,
+        /nuggets/i, /thunder/i, /cavaliers/i, /knicks/i, /76ers/i, /sixers/i,
+        /nets/i, /heat/i, /mavs/i, /mavericks/i, /clippers/i, /suns/i,
+        /betclic\s*[eé]lite/i, /pro\s*[ab]/i, /eurocup/i, /fiba/i
     ],
     'Football': [
         /but(s|eur)?/i, /corner/i, /carton/i, /clean[\s-]?sheet/i,
@@ -2725,7 +2741,15 @@ const SPORT_PATTERNS = {
         /psg/i, /real[\s-]?madrid/i, /barcelona/i, /bayern/i,
         /victoire.*domicile/i, /victoire.*extérieur/i,
         /btts/i, /les[\s-]?deux.*marqu/i, /1n2/i,
-        /\+\d+\.?\d*\s*buts?/i, /\-\d+\.?\d*\s*buts?/i
+        /\+\d+\.?\d*\s*buts?/i, /\-\d+\.?\d*\s*buts?/i,
+        /2[\s-]?équipes?\s*marqu/i, /les\s*2\s*marqu/i, /goal/i,
+        /0[\s-]?0/i, /1[\s-]?0/i, /2[\s-]?1/i, /score\s*exact/i,
+        /mt[\s\/]ft/i, /mi[\s-]?temps[\s\/]fin/i,
+        /nombre\s*de\s*buts/i, /total\s*buts/i,
+        /over.*\d+[\.,]\d*\s*buts?/i, /under.*\d+[\.,]\d*\s*buts?/i,
+        /liverpool/i, /arsenal/i, /city/i, /chelsea/i, /juventus/i,
+        /inter/i, /milan/i, /napoli/i, /dortmund/i, /atletico/i,
+        /marseille/i, /lyon/i, /monaco/i, /lille/i, /lens/i
     ],
     'Rugby': [
         /essai/i, /transformation/i, /mêlée/i, /touche/i,

@@ -1144,11 +1144,17 @@
             z-index: 500;
             min-width: 140px;
             overflow: hidden;
-            animation: confirmIn 0.15s ease-out;
+            opacity: 0;
         }
 
         .status-dropdown.open {
             display: block;
+            animation: dropdownFadeIn 0.15s ease-out forwards;
+        }
+
+        @keyframes dropdownFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
         .status-option {
@@ -1450,6 +1456,29 @@
                             <canvas id="bookmakerChart"></canvas>
                         </div>
                     </div>
+                </div>
+
+                <div class="card" style="margin-bottom: 24px;">
+                    <div class="card-header">
+                        <h3 class="card-title">Profit / Perte par Jour</h3>
+                        <select id="dailyPeriodFilter" onchange="updateAnalyzer()" style="width: auto; padding: 8px 14px; font-size: 0.85em; border-radius: 10px;">
+                            <option value="7">7 derniers jours</option>
+                            <option value="14">14 derniers jours</option>
+                            <option value="30" selected>30 derniers jours</option>
+                            <option value="90">3 mois</option>
+                            <option value="all">Tout</option>
+                        </select>
+                    </div>
+                    <div class="chart-container" style="height: 280px;">
+                        <canvas id="dailyPnlChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-bottom: 24px;">
+                    <div class="card-header">
+                        <h3 class="card-title">Historique Journalier</h3>
+                    </div>
+                    <div id="dailyHistoryTable"></div>
                 </div>
 
                 <div class="grid-2">
@@ -3682,6 +3711,8 @@ function updateAnalyzer() {
 
     updateSportChart(br);
     updateBookmakerChart(br);
+    updateDailyPnlChart(br);
+    updateDailyHistoryTable(br);
     updateConfidenceChart(br);
     updateOddsChart(br);
 }
@@ -3704,6 +3735,218 @@ function calculateStreak(br) {
     });
 
     return max;
+}
+
+function getDailyStats(br) {
+    const dailyMap = {};
+    
+    br.bets.forEach(bet => {
+        if (bet.status === 'en-cours') return;
+        const day = bet.date ? bet.date.split('T')[0] : null;
+        if (!day) return;
+        
+        if (!dailyMap[day]) dailyMap[day] = { date: day, profit: 0, stake: 0, won: 0, lost: 0, bets: 0 };
+        
+        const odds = bet.type === 'combine' ? bet.totalOdds : bet.odds;
+        dailyMap[day].bets++;
+        dailyMap[day].stake += bet.amount;
+        
+        if (bet.status === 'gagne') {
+            dailyMap[day].won++;
+            dailyMap[day].profit += (bet.amount * odds) - bet.amount;
+        } else if (bet.status === 'perdu') {
+            dailyMap[day].lost++;
+            dailyMap[day].profit -= bet.amount;
+        } else if (bet.status === 'cashout') {
+            dailyMap[day].profit += (bet.cashoutAmount || 0) - bet.amount;
+        }
+    });
+    
+    return Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function updateDailyPnlChart(br) {
+    const ctx = document.getElementById('dailyPnlChart');
+    const allDays = getDailyStats(br);
+    const periodFilter = document.getElementById('dailyPeriodFilter').value;
+    
+    let days;
+    if (periodFilter === 'all') {
+        days = allDays;
+    } else {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - parseInt(periodFilter));
+        const cutoffStr = cutoff.toISOString().split('T')[0];
+        days = allDays.filter(d => d.date >= cutoffStr);
+    }
+    
+    // Fill missing days
+    if (days.length > 0 && periodFilter !== 'all') {
+        const startDate = new Date(days[0].date);
+        const endDate = new Date();
+        const filledDays = [];
+        const dayMap = {};
+        days.forEach(d => dayMap[d.date] = d);
+        
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+            const key = d.toISOString().split('T')[0];
+            filledDays.push(dayMap[key] || { date: key, profit: 0, stake: 0, won: 0, lost: 0, bets: 0 });
+        }
+        days = filledDays;
+    }
+    
+    if (days.length === 0) {
+        if (charts.dailyPnl) charts.dailyPnl.destroy();
+        return;
+    }
+    
+    // Cumulative P&L
+    let cumulative = 0;
+    const cumulativeData = days.map(d => {
+        cumulative += d.profit;
+        return cumulative;
+    });
+    
+    const labels = days.map(d => {
+        const dt = new Date(d.date + 'T12:00:00');
+        return dt.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+    });
+    
+    const isDark = document.body.getAttribute('data-theme') === 'dark';
+    
+    if (charts.dailyPnl) charts.dailyPnl.destroy();
+    
+    charts.dailyPnl = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    type: 'line',
+                    label: 'P&L Cumulé',
+                    data: cumulativeData,
+                    borderColor: '#818cf8',
+                    backgroundColor: 'rgba(129, 140, 248, 0.1)',
+                    borderWidth: 2.5,
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 0,
+                    pointHoverRadius: 5,
+                    yAxisID: 'y1',
+                    order: 1
+                },
+                {
+                    type: 'bar',
+                    label: 'Profit/Perte',
+                    data: days.map(d => d.profit),
+                    backgroundColor: days.map(d => d.profit >= 0 ? 'rgba(16, 185, 129, 0.7)' : 'rgba(239, 68, 68, 0.7)'),
+                    borderColor: days.map(d => d.profit >= 0 ? '#10b981' : '#ef4444'),
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    yAxisID: 'y',
+                    order: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { intersect: false, mode: 'index' },
+            plugins: {
+                legend: { labels: { color: isDark ? '#94a3b8' : '#6b7280', font: { weight: 600 } } },
+                tooltip: {
+                    backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                    titleColor: isDark ? '#f1f5f9' : '#111827',
+                    bodyColor: isDark ? '#94a3b8' : '#6b7280',
+                    borderColor: isDark ? '#334155' : '#e5e7eb',
+                    borderWidth: 1,
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(2)} €`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: isDark ? '#1e293b' : '#f3f4f6' },
+                    ticks: { color: isDark ? '#64748b' : '#9ca3af', maxRotation: 45, font: { size: 10 } }
+                },
+                y: {
+                    position: 'left',
+                    grid: { color: isDark ? '#1e293b' : '#f3f4f6' },
+                    ticks: { color: isDark ? '#64748b' : '#9ca3af', callback: v => v.toFixed(0) + ' €' }
+                },
+                y1: {
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { color: '#818cf8', callback: v => v.toFixed(0) + ' €' }
+                }
+            }
+        }
+    });
+}
+
+function updateDailyHistoryTable(br) {
+    const container = document.getElementById('dailyHistoryTable');
+    const days = getDailyStats(br).reverse(); // Most recent first
+    
+    if (days.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">📅</div><p class="empty-text">Aucune donnée journalière</p></div>';
+        return;
+    }
+    
+    // Show last 15 days max
+    const shown = days.slice(0, 15);
+    
+    container.innerHTML = `
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Paris</th>
+                        <th>Gagnés</th>
+                        <th>Perdus</th>
+                        <th>Win Rate</th>
+                        <th>Misé</th>
+                        <th>Profit/Perte</th>
+                        <th>ROI</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${shown.map(d => {
+                        const winRate = d.bets > 0 ? ((d.won / d.bets) * 100) : 0;
+                        const roi = d.stake > 0 ? ((d.profit / d.stake) * 100) : 0;
+                        const dt = new Date(d.date + 'T12:00:00');
+                        const dateStr = dt.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+                        
+                        return `
+                            <tr>
+                                <td style="font-weight: 600;">${dateStr}</td>
+                                <td>${d.bets}</td>
+                                <td style="color: var(--success); font-weight: 600;">${d.won}</td>
+                                <td style="color: var(--danger); font-weight: 600;">${d.lost}</td>
+                                <td>
+                                    <div style="display:flex;align-items:center;gap:8px;">
+                                        <div style="flex:1;height:6px;background:var(--bg-secondary);border-radius:3px;overflow:hidden;">
+                                            <div style="width:${winRate}%;height:100%;background:${winRate >= 50 ? 'var(--success)' : 'var(--danger)'};border-radius:3px;"></div>
+                                        </div>
+                                        <span style="font-size:0.85em;font-weight:600;color:${winRate >= 50 ? 'var(--success)' : 'var(--danger)'};">${winRate.toFixed(0)}%</span>
+                                    </div>
+                                </td>
+                                <td>${d.stake.toFixed(2)} €</td>
+                                <td style="color: ${d.profit >= 0 ? 'var(--success)' : 'var(--danger)'}; font-weight: 700;">
+                                    ${d.profit >= 0 ? '+' : ''}${d.profit.toFixed(2)} €
+                                </td>
+                                <td style="color: ${roi >= 0 ? 'var(--success)' : 'var(--danger)'}; font-weight: 600;">
+                                    ${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
 }
 
 function updateSportChart(br) {

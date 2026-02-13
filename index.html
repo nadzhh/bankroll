@@ -2216,7 +2216,7 @@ async function createBin() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-Access-Key': JSONBIN_API_KEY,
+                'X-Master-Key': JSONBIN_API_KEY,
                 'X-Bin-Name': 'bet-tracker-data',
                 'X-Bin-Private': 'false'
             },
@@ -2250,27 +2250,47 @@ async function _doSync() {
 
     try {
         if (!JSONBIN_BIN_ID) {
-            await createBin();
+            const created = await createBin();
+            if (!created) {
+                showSyncStatus('error');
+                return;
+            }
         }
         
         if (JSONBIN_BIN_ID) {
+            const payload = {
+                bankrolls: bankrolls,
+                currentBankrollId: currentBankrollId,
+                lastUpdated: new Date().toISOString()
+            };
+            
             const res = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Access-Key': JSONBIN_API_KEY
+                    'X-Master-Key': JSONBIN_API_KEY
                 },
-                body: JSON.stringify({
-                    bankrolls: bankrolls,
-                    currentBankrollId: currentBankrollId,
-                    lastUpdated: new Date().toISOString()
-                })
+                body: JSON.stringify(payload)
             });
             
             if (res.ok) {
                 showSyncStatus('ok');
             } else {
-                showSyncStatus('error');
+                const errData = await res.json().catch(() => ({}));
+                console.error('Sync error:', res.status, errData);
+                // If bin not found, reset and recreate
+                if (res.status === 404 || res.status === 401 || res.status === 403) {
+                    JSONBIN_BIN_ID = null;
+                    localStorage.removeItem('jsonbin_bin_id');
+                    const created = await createBin();
+                    if (created) {
+                        showSyncStatus('ok');
+                    } else {
+                        showSyncStatus('error');
+                    }
+                } else {
+                    showSyncStatus('error');
+                }
             }
         }
     } catch(e) {
@@ -2292,7 +2312,7 @@ async function loadFromCloud() {
     showSyncStatus('syncing');
     try {
         const res = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
-            headers: { 'X-Access-Key': JSONBIN_API_KEY }
+            headers: { 'X-Master-Key': JSONBIN_API_KEY }
         });
         
         if (res.ok) {

@@ -1897,6 +1897,11 @@
                         </div>
                     </div>
 
+                    <div class="form-group">
+                        <label>Date du pari</label>
+                        <input type="date" id="simpleDate">
+                    </div>
+
                     <button type="submit" class="btn" style="width: 100%; margin-top: 8px;">Ajouter</button>
                 </form>
             </div>
@@ -2905,6 +2910,8 @@ openModal = function(id) {
     originalOpenModal(id);
     if (id === 'addBetModal' && !editingBetId) {
         document.getElementById('simpleSport').dataset.manuallySet = '';
+        // Set default date to today
+        document.getElementById('simpleDate').value = new Date().toISOString().split('T')[0];
     }
 };
 
@@ -3004,7 +3011,7 @@ document.getElementById('simpleBetForm').addEventListener('submit', async (e) =>
         confidence: parseInt(document.getElementById('simpleConf').value),
         status: document.getElementById('simpleStatus').value,
         bookmaker: bookmaker || '-',
-        date: editingBetId ? br.bets.find(b => String(b.id) === String(editingBetId)).date : new Date().toISOString()
+        date: document.getElementById('simpleDate').value ? new Date(document.getElementById('simpleDate').value + 'T12:00:00').toISOString() : new Date().toISOString()
     };
 
     // If cashout, ask for the amount
@@ -3084,6 +3091,11 @@ function editBet(id) {
     document.getElementById('simpleStatus').value = bet.status;
     updateBookmakerSelect('simpleBookmaker');
     document.getElementById('simpleBookmaker').value = bet.bookmaker === '-' ? '' : bet.bookmaker;
+    
+    // Set date
+    if (bet.date) {
+        document.getElementById('simpleDate').value = bet.date.split('T')[0];
+    }
     
     // Change button text
     const submitBtn = document.querySelector('#simpleBetForm button[type="submit"]');
@@ -5246,6 +5258,24 @@ function parseOcrMultiBets(rawText) {
             sport = detectSport(blockText) || detectSport(betName) || detectSport(match) || '';
         }
         
+        // ---- DETECT DATE ----
+        let betDate = new Date().toISOString().split('T')[0]; // default today
+        for (const line of block) {
+            // "14/02/2026 10:53" or "14/02/2026"
+            const fullDate = line.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+            if (fullDate) {
+                betDate = `${fullDate[3]}-${fullDate[2]}-${fullDate[1]}`;
+                break;
+            }
+            // "Sam. 14/02" format
+            const shortDate = line.match(/(?:sam|dim|lun|mar|mer|jeu|ven)\w*\.?\s*(\d{2})\/(\d{2})/i);
+            if (shortDate) {
+                const year = new Date().getFullYear();
+                betDate = `${year}-${shortDate[2]}-${shortDate[1]}`;
+                break;
+            }
+        }
+        
         // Only add if we found meaningful content
         if (betName || match || amount > 0 || odds > 0) {
             bets.push({
@@ -5258,7 +5288,8 @@ function parseOcrMultiBets(rawText) {
                 bookmaker: bookmaker,
                 odds: odds,
                 amount: amount,
-                status: status
+                status: status,
+                date: betDate
             });
         }
     });
@@ -5275,7 +5306,8 @@ function parseOcrMultiBets(rawText) {
             bookmaker: bookmaker,
             odds: 0,
             amount: 0,
-            status: 'en-cours'
+            status: 'en-cours',
+            date: new Date().toISOString().split('T')[0]
         });
     }
     
@@ -5332,7 +5364,7 @@ function renderOcrBets() {
                 <input type="text" value="${(bet.match || '').replace(/"/g, '&quot;')}" onchange="ocrDetectedBets[${i}].match = this.value" placeholder="Équipe A vs Équipe B" style="padding: 10px 12px;">
             </div>
             
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div class="form-group" style="margin-bottom: 0;">
                     <label style="font-size: 0.82em;">Mise (€)</label>
                     <input type="number" step="0.01" value="${bet.amount || ''}" onchange="ocrDetectedBets[${i}].amount = parseFloat(this.value) || 0" placeholder="10.00" style="padding: 10px 12px;">
@@ -5340,6 +5372,10 @@ function renderOcrBets() {
                 <div class="form-group" style="margin-bottom: 0;">
                     <label style="font-size: 0.82em;">Cote</label>
                     <input type="number" step="0.01" value="${bet.odds || ''}" onchange="ocrDetectedBets[${i}].odds = parseFloat(this.value) || 0" placeholder="1.85" style="padding: 10px 12px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.82em;">Date</label>
+                    <input type="date" value="${bet.date || new Date().toISOString().split('T')[0]}" onchange="ocrDetectedBets[${i}].date = this.value" style="padding: 10px 12px;">
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">
                     <label style="font-size: 0.82em;">Statut</label>
@@ -5384,7 +5420,7 @@ function submitAllOcrBets() {
             confidence: 50,
             status: b.status,
             bookmaker: b.bookmaker,
-            date: new Date().toISOString(),
+            date: b.date ? new Date(b.date + 'T12:00:00').toISOString() : new Date().toISOString(),
             notes: 'Ajouté via screenshot OCR'
         };
         

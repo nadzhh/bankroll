@@ -2135,7 +2135,8 @@ function customConfirm(title, message, icon = '⚠️', okText = 'Confirmer', da
 // ===================================
 // DATA & STATE + JSONBIN SYNC
 // ===================================
-const JSONBIN_API_KEY = '$2a$10$88c8JbIkwDurineaXh4r0eZbBFd1BcccRkGtfonBD9MQ8Qq41Sd8e';
+const JSONBIN_ACCESS_KEY = '$2a$10$88c8JbIkwDurineaXh4r0eZbBFd1BcccRkGtfonBD9MQ8Qq41Sd8e';
+const JSONBIN_MASTER_KEY = '$2a$10$7JRhURu5916XXuZSR3qoHuxlh9cxOjaSGpeQOKme2d13aM1Zyq.Yy';
 let JSONBIN_BIN_ID = localStorage.getItem('jsonbin_bin_id') || null;
 let isSyncing = false;
 let syncQueue = false;
@@ -2216,7 +2217,7 @@ async function createBin() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-Master-Key': JSONBIN_API_KEY,
+                'X-Master-Key': JSONBIN_MASTER_KEY,
                 'X-Bin-Name': 'bet-tracker-data',
                 'X-Bin-Private': 'false'
             },
@@ -2268,7 +2269,7 @@ async function _doSync() {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Master-Key': JSONBIN_API_KEY
+                    'X-Master-Key': JSONBIN_MASTER_KEY
                 },
                 body: JSON.stringify(payload)
             });
@@ -2312,7 +2313,7 @@ async function loadFromCloud() {
     showSyncStatus('syncing');
     try {
         const res = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
-            headers: { 'X-Master-Key': JSONBIN_API_KEY }
+            headers: { 'X-Master-Key': JSONBIN_MASTER_KEY }
         });
         
         if (res.ok) {

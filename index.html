@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bet Tracker Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
@@ -1767,6 +1768,117 @@
                 <div class="tab active" data-tab="simple">Simple</div>
                 <div class="tab" data-tab="combine">Combiné</div>
                 <div class="tab" data-tab="systeme">Système</div>
+                <div class="tab" data-tab="screenshot" style="color: var(--primary);"><i class="fas fa-camera" style="margin-right: 6px;"></i>Screenshot</div>
+            </div>
+
+            <!-- SCREENSHOT IMPORT -->
+            <div class="tab-content" id="screenshot">
+                <div style="margin-bottom: 20px;">
+                    <p style="color: var(--text-secondary); font-size: 0.9em; margin-bottom: 16px;">
+                        Importez une capture d'écran de votre ticket de pari. L'OCR va détecter automatiquement les informations.
+                    </p>
+                    
+                    <div id="screenshotDropzone" style="border: 2px dashed var(--border); border-radius: 16px; padding: 40px 20px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--bg-secondary);" onclick="document.getElementById('screenshotInput').click()">
+                        <div id="screenshotPreviewArea">
+                            <i class="fas fa-cloud-upload-alt" style="font-size: 2.5em; color: var(--primary); margin-bottom: 12px;"></i>
+                            <p style="font-weight: 600; margin-bottom: 6px;">Glissez une image ici ou cliquez pour importer</p>
+                            <p style="font-size: 0.85em; color: var(--text-secondary);">PNG, JPG — Capture d'écran Betclic, Winamax, Unibet...</p>
+                        </div>
+                    </div>
+                    <input type="file" id="screenshotInput" accept="image/*" style="display: none;" onchange="handleScreenshot(this.files[0])">
+                </div>
+
+                <div id="ocrProgressArea" style="display: none;">
+                    <div style="padding: 20px; background: var(--bg-secondary); border-radius: 12px; text-align: center;">
+                        <i class="fas fa-cog fa-spin" style="font-size: 1.8em; color: var(--primary); margin-bottom: 10px;"></i>
+                        <p style="font-weight: 600;" id="ocrStatusText">Analyse en cours...</p>
+                        <div style="margin-top: 12px; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden;">
+                            <div id="ocrProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary), var(--info)); border-radius: 3px; transition: width 0.3s;"></div>
+                        </div>
+                        <p style="font-size: 0.8em; color: var(--text-secondary); margin-top: 8px;" id="ocrProgressPercent">0%</p>
+                    </div>
+                </div>
+
+                <div id="ocrResultArea" style="display: none;">
+                    <div style="padding: 16px; background: rgba(16,185,129,0.1); border: 1px solid var(--success); border-radius: 12px; margin-bottom: 16px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <i class="fas fa-check-circle" style="color: var(--success);"></i>
+                            <span style="font-weight: 700; color: var(--success);">Détection terminée</span>
+                        </div>
+                        <p style="font-size: 0.85em; color: var(--text-secondary);">Vérifiez et corrigez les informations ci-dessous avant de valider.</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Nom du Pari détecté</label>
+                        <input type="text" id="ocrBetName" placeholder="Nom du pari">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Sport</label>
+                            <select id="ocrSport">
+                                <option value="">Sélectionner</option>
+                                <option value="Football">Football</option>
+                                <option value="Basketball">Basketball</option>
+                                <option value="Tennis">Tennis</option>
+                                <option value="Rugby">Rugby</option>
+                                <option value="MMA">MMA</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Bookmaker</label>
+                            <select id="ocrBookmaker">
+                                <option value="">Sélectionner</option>
+                                <option value="Betclic">Betclic</option>
+                                <option value="Unibet">Unibet</option>
+                                <option value="Winamax">Winamax</option>
+                                <option value="PMU">PMU</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Match</label>
+                        <input type="text" id="ocrMatch" placeholder="Équipe A vs Équipe B">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Mise (€)</label>
+                            <input type="number" step="0.01" id="ocrAmount" placeholder="10.00">
+                        </div>
+                        <div class="form-group">
+                            <label>Cote</label>
+                            <input type="number" step="0.01" id="ocrOdds" placeholder="1.85">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Gain potentiel (€)</label>
+                            <input type="number" step="0.01" id="ocrPotentialWin" placeholder="18.50" disabled style="opacity: 0.7;">
+                        </div>
+                        <div class="form-group">
+                            <label>Statut</label>
+                            <select id="ocrStatus">
+                                <option value="en-cours">En cours</option>
+                                <option value="gagne">Gagné</option>
+                                <option value="perdu">Perdu</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="ocrRawText" style="display: none; margin-bottom: 16px;">
+                        <label style="cursor: pointer;" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+                            <i class="fas fa-eye"></i> Voir le texte brut détecté
+                        </label>
+                        <pre style="display: none; margin-top: 8px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; font-size: 0.8em; color: var(--text-secondary); white-space: pre-wrap; max-height: 150px; overflow-y: auto;" id="ocrRawContent"></pre>
+                    </div>
+
+                    <button type="button" class="btn" style="width: 100%;" onclick="submitOcrBet()">
+                        <i class="fas fa-check"></i> Ajouter ce pari
+                    </button>
+                </div>
             </div>
 
             <!-- SIMPLE BET -->
@@ -4847,6 +4959,303 @@ function updatePronoRecommendations() {
             </div>
         `).join('')}
     </div>`;
+}
+
+// ===================================
+// SCREENSHOT OCR - TESSERACT.JS
+// ===================================
+
+// Drag & drop support
+const dropzone = document.getElementById('screenshotDropzone');
+if (dropzone) {
+    dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.style.borderColor = 'var(--primary)';
+        dropzone.style.background = 'rgba(99,102,241,0.05)';
+    });
+    dropzone.addEventListener('dragleave', () => {
+        dropzone.style.borderColor = 'var(--border)';
+        dropzone.style.background = 'var(--bg-secondary)';
+    });
+    dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.style.borderColor = 'var(--border)';
+        dropzone.style.background = 'var(--bg-secondary)';
+        if (e.dataTransfer.files.length > 0) {
+            handleScreenshot(e.dataTransfer.files[0]);
+        }
+    });
+}
+
+async function handleScreenshot(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        document.getElementById('screenshotPreviewArea').innerHTML = `
+            <img src="${e.target.result}" style="max-width: 100%; max-height: 200px; border-radius: 10px; margin-bottom: 10px;">
+            <p style="font-size: 0.85em; color: var(--text-secondary);">${file.name}</p>
+        `;
+    };
+    reader.readAsDataURL(file);
+    
+    // Show progress
+    document.getElementById('ocrProgressArea').style.display = 'block';
+    document.getElementById('ocrResultArea').style.display = 'none';
+    
+    try {
+        const worker = await Tesseract.createWorker('fra+eng', 1, {
+            logger: (m) => {
+                if (m.status === 'recognizing text') {
+                    const pct = Math.round(m.progress * 100);
+                    document.getElementById('ocrProgressBar').style.width = pct + '%';
+                    document.getElementById('ocrProgressPercent').textContent = pct + '%';
+                    document.getElementById('ocrStatusText').textContent = 'Lecture du texte...';
+                } else if (m.status === 'loading language traineddata') {
+                    document.getElementById('ocrStatusText').textContent = 'Chargement du modèle OCR...';
+                }
+            }
+        });
+        
+        const { data: { text } } = await worker.recognize(file);
+        await worker.terminate();
+        
+        // Parse the extracted text
+        parseOcrText(text);
+        
+    } catch(err) {
+        console.error('OCR Error:', err);
+        document.getElementById('ocrProgressArea').innerHTML = `
+            <div style="padding: 20px; background: rgba(239,68,68,0.1); border: 1px solid var(--danger); border-radius: 12px; text-align: center;">
+                <i class="fas fa-exclamation-circle" style="font-size: 1.5em; color: var(--danger); margin-bottom: 8px;"></i>
+                <p style="font-weight: 600; color: var(--danger);">Erreur lors de l'analyse</p>
+                <p style="font-size: 0.85em; color: var(--text-secondary);">Essayez avec une image plus nette.</p>
+            </div>
+        `;
+    }
+}
+
+function parseOcrText(rawText) {
+    const text = rawText.trim();
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const lowerText = text.toLowerCase();
+    
+    // Show raw text
+    document.getElementById('ocrRawContent').textContent = text;
+    document.getElementById('ocrRawText').style.display = 'block';
+    
+    // Detect bookmaker
+    let bookmaker = '';
+    if (/betclic/i.test(text)) bookmaker = 'Betclic';
+    else if (/winamax/i.test(text)) bookmaker = 'Winamax';
+    else if (/unibet/i.test(text)) bookmaker = 'Unibet';
+    else if (/pmu/i.test(text)) bookmaker = 'PMU';
+    else if (/parions\s*sport/i.test(text)) bookmaker = 'PMU';
+    
+    // Detect odds - look for patterns like "1.85", "2,10", "Cote: 1.85", "@1.85"
+    let odds = '';
+    const oddsPatterns = [
+        /cote\s*[:\-]?\s*(\d+[.,]\d+)/i,
+        /@\s*(\d+[.,]\d+)/,
+        /(\d+[.,]\d{2})\s*$/m,
+        /(\d+[.,]\d{2})/
+    ];
+    for (const pattern of oddsPatterns) {
+        const m = text.match(pattern);
+        if (m) {
+            const val = parseFloat(m[1].replace(',', '.'));
+            if (val >= 1.01 && val <= 100) {
+                odds = val;
+                break;
+            }
+        }
+    }
+    
+    // Detect stake/mise
+    let amount = '';
+    const stakePatterns = [
+        /mise\s*[:\-]?\s*(\d+[.,]?\d*)\s*[€e]/i,
+        /(\d+[.,]?\d*)\s*[€e]\s*(mis|pari)/i,
+        /montant\s*[:\-]?\s*(\d+[.,]?\d*)/i,
+        /(\d+[.,]\d{2})\s*€/,
+        /€\s*(\d+[.,]\d{2})/
+    ];
+    for (const pattern of stakePatterns) {
+        const m = text.match(pattern);
+        if (m) {
+            const val = parseFloat(m[1].replace(',', '.'));
+            if (val > 0 && val < 100000) {
+                amount = val;
+                break;
+            }
+        }
+    }
+    
+    // Detect potential win
+    let potentialWin = '';
+    const winPatterns = [
+        /gain\s*(potentiel|possible)?\s*[:\-]?\s*(\d+[.,]?\d*)\s*[€e]/i,
+        /potentiel\s*[:\-]?\s*(\d+[.,]?\d*)\s*[€e]/i,
+        /remporter\s*[:\-]?\s*(\d+[.,]?\d*)/i
+    ];
+    for (const pattern of winPatterns) {
+        const m = text.match(pattern);
+        if (m) {
+            const val = parseFloat((m[2] || m[1]).replace(',', '.'));
+            if (val > 0) { potentialWin = val; break; }
+        }
+    }
+    
+    // Detect match / teams - look for "vs", "-", "contre" patterns
+    let match = '';
+    let betName = '';
+    const vsPatterns = [
+        /(.{2,30})\s+(?:vs\.?|[-–—]|contre)\s+(.{2,30})/i
+    ];
+    for (const line of lines) {
+        for (const pattern of vsPatterns) {
+            const m = line.match(pattern);
+            if (m) {
+                const t1 = m[1].trim();
+                const t2 = m[2].trim();
+                // Filter out lines that are just numbers/dates
+                if (!/^\d+$/.test(t1) && !/^\d+$/.test(t2)) {
+                    match = `${t1} vs ${t2}`;
+                    break;
+                }
+            }
+        }
+        if (match) break;
+    }
+    
+    // Detect sport from text
+    const detectedSport = detectSport(text);
+    
+    // Try to build bet name from context
+    const betTypePatterns = [
+        /victoire\s+(.+)/i,
+        /(gagne|vainqueur)\s*[:\-]?\s*(.+)/i,
+        /r[ée]sultat\s*[:\-]?\s*(.+)/i,
+        /(btts|les deux marquent|plus de|moins de|over|under|handicap|score exact)/i,
+        /(1N2|double chance|mi-temps)/i
+    ];
+    for (const line of lines) {
+        for (const pattern of betTypePatterns) {
+            const m = line.match(pattern);
+            if (m && !betName) {
+                betName = line.substring(0, 60);
+                break;
+            }
+        }
+        if (betName) break;
+    }
+    
+    // Fallback bet name: use match or first meaningful line
+    if (!betName && match) betName = match;
+    if (!betName) {
+        for (const line of lines) {
+            if (line.length > 5 && line.length < 80 && !/^\d+[.,]?\d*\s*€?$/.test(line)) {
+                betName = line;
+                break;
+            }
+        }
+    }
+    
+    // Calculate potential win if we have odds and amount
+    if (!potentialWin && odds && amount) {
+        potentialWin = (odds * amount).toFixed(2);
+    }
+    
+    // Fill form
+    document.getElementById('ocrBetName').value = betName || '';
+    document.getElementById('ocrSport').value = detectedSport || '';
+    document.getElementById('ocrBookmaker').value = bookmaker || '';
+    document.getElementById('ocrMatch').value = match || '';
+    document.getElementById('ocrAmount').value = amount || '';
+    document.getElementById('ocrOdds').value = odds || '';
+    document.getElementById('ocrPotentialWin').value = potentialWin || '';
+    
+    // Update potential win when odds/amount change
+    document.getElementById('ocrOdds').oninput = updateOcrPotentialWin;
+    document.getElementById('ocrAmount').oninput = updateOcrPotentialWin;
+    
+    // Show result
+    document.getElementById('ocrProgressArea').style.display = 'none';
+    document.getElementById('ocrResultArea').style.display = 'block';
+}
+
+function updateOcrPotentialWin() {
+    const odds = parseFloat(document.getElementById('ocrOdds').value) || 0;
+    const amount = parseFloat(document.getElementById('ocrAmount').value) || 0;
+    document.getElementById('ocrPotentialWin').value = (odds * amount).toFixed(2);
+}
+
+function submitOcrBet() {
+    const name = document.getElementById('ocrBetName').value;
+    const sport = document.getElementById('ocrSport').value;
+    const match = document.getElementById('ocrMatch').value;
+    const amount = parseFloat(document.getElementById('ocrAmount').value);
+    const odds = parseFloat(document.getElementById('ocrOdds').value);
+    const bookmaker = document.getElementById('ocrBookmaker').value;
+    const status = document.getElementById('ocrStatus').value;
+    
+    if (!name || !amount || !odds) {
+        alert('Veuillez remplir au minimum : Nom, Mise et Cote');
+        return;
+    }
+    
+    const br = getCurrentBankroll();
+    const bet = {
+        id: Date.now(),
+        type: 'simple',
+        name: name,
+        sport: sport || 'Football',
+        league: '',
+        match: match,
+        amount: amount,
+        odds: odds,
+        confidence: 50,
+        status: status,
+        bookmaker: bookmaker,
+        date: new Date().toISOString(),
+        notes: 'Ajouté via screenshot OCR'
+    };
+    
+    // Handle bankroll updates
+    br.currentAmount -= amount;
+    if (bookmaker && bookmaker !== '-') {
+        if (!br.bookmakers[bookmaker]) br.bookmakers[bookmaker] = 0;
+        br.bookmakers[bookmaker] -= amount;
+    }
+    
+    if (status === 'gagne') {
+        const gain = amount * odds;
+        br.currentAmount += gain;
+        if (bookmaker && bookmaker !== '-') br.bookmakers[bookmaker] += gain;
+    } else if (status === 'cashout') {
+        br.currentAmount += amount;
+        if (bookmaker && bookmaker !== '-') br.bookmakers[bookmaker] += amount;
+    }
+    
+    br.bets.push(bet);
+    saveData();
+    closeModal('addBetModal');
+    updateDashboard();
+    
+    // Reset screenshot form
+    resetScreenshotForm();
+}
+
+function resetScreenshotForm() {
+    document.getElementById('screenshotPreviewArea').innerHTML = `
+        <i class="fas fa-cloud-upload-alt" style="font-size: 2.5em; color: var(--primary); margin-bottom: 12px;"></i>
+        <p style="font-weight: 600; margin-bottom: 6px;">Glissez une image ici ou cliquez pour importer</p>
+        <p style="font-size: 0.85em; color: var(--text-secondary);">PNG, JPG — Capture d'écran Betclic, Winamax, Unibet...</p>
+    `;
+    document.getElementById('ocrProgressArea').style.display = 'none';
+    document.getElementById('ocrResultArea').style.display = 'none';
+    document.getElementById('screenshotInput').value = '';
 }
 
 // ===================================

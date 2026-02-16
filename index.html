@@ -2194,9 +2194,15 @@
                         </div>
                     </div>
 
-                    <div class="form-group">
-                        <label>Date du pari</label>
-                        <input type="date" id="simpleDate">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Date du pari</label>
+                            <input type="date" id="simpleDate">
+                        </div>
+                        <div class="form-group">
+                            <label>Heure</label>
+                            <input type="time" id="simpleTime">
+                        </div>
                     </div>
 
                     <button type="submit" class="btn" style="width: 100%; margin-top: 8px;">Ajouter</button>
@@ -3280,8 +3286,10 @@ openModal = function(id) {
     originalOpenModal(id);
     if (id === 'addBetModal' && !editingBetId) {
         document.getElementById('simpleSport').dataset.manuallySet = '';
-        // Set default date to today
-        document.getElementById('simpleDate').value = new Date().toISOString().split('T')[0];
+        // Set default date to today and time to now
+        const now = new Date();
+        document.getElementById('simpleDate').value = now.toISOString().split('T')[0];
+        document.getElementById('simpleTime').value = now.toTimeString().slice(0, 5);
     }
 };
 
@@ -3381,7 +3389,11 @@ document.getElementById('simpleBetForm').addEventListener('submit', async (e) =>
         confidence: parseInt(document.getElementById('simpleConf').value),
         status: document.getElementById('simpleStatus').value,
         bookmaker: bookmaker || '-',
-        date: document.getElementById('simpleDate').value ? new Date(document.getElementById('simpleDate').value + 'T12:00:00').toISOString() : new Date().toISOString()
+        date: (() => {
+            const d = document.getElementById('simpleDate').value;
+            const t = document.getElementById('simpleTime').value || '12:00';
+            return d ? new Date(d + 'T' + t + ':00').toISOString() : new Date().toISOString();
+        })()
     };
 
     // If cashout, ask for the amount
@@ -3462,9 +3474,13 @@ function editBet(id) {
     updateBookmakerSelect('simpleBookmaker');
     document.getElementById('simpleBookmaker').value = bet.bookmaker === '-' ? '' : bet.bookmaker;
     
-    // Set date
+    // Set date and time
     if (bet.date) {
         document.getElementById('simpleDate').value = bet.date.split('T')[0];
+        const timePart = bet.date.split('T')[1];
+        if (timePart) {
+            document.getElementById('simpleTime').value = timePart.slice(0, 5);
+        }
     }
     
     // Change button text
@@ -3979,7 +3995,8 @@ function updateRecentBets(br) {
                 </thead>
                 <tbody>
                     ${recent.map(bet => {
-                        const date = new Date(bet.date).toLocaleDateString('fr-FR');
+                        const dt = new Date(bet.date);
+                        const date = dt.toLocaleDateString('fr-FR') + ' ' + dt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
                         const odds = bet.type === 'combine' ? bet.totalOdds : bet.odds;
 
                         return `
@@ -4076,7 +4093,8 @@ function updateBetsTable(br) {
                 </thead>
                 <tbody>
                     ${filtered.map(bet => {
-                        const date = new Date(bet.date).toLocaleDateString('fr-FR');
+                        const dt = new Date(bet.date);
+                        const date = dt.toLocaleDateString('fr-FR') + ' ' + dt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
                         const odds = bet.type === 'combine' ? bet.totalOdds : bet.odds;
 
                         let details = '';
@@ -5598,6 +5616,24 @@ function parseOcrMultiBets(rawText) {
             sport = detectSport(blockText) || detectSport(betName) || detectSport(match) || '';
         }
         
+        // ---- DETECT DATE & TIME ----
+        let betDate = new Date().toISOString().split('T')[0];
+        let betTime = new Date().toTimeString().slice(0, 5);
+        for (const line of block) {
+            const fullDate = line.match(/(\d{2})\/(\d{2})\/(\d{4})\s*(\d{2}:\d{2})?/);
+            if (fullDate) {
+                betDate = `${fullDate[3]}-${fullDate[2]}-${fullDate[1]}`;
+                if (fullDate[4]) betTime = fullDate[4];
+                break;
+            }
+            const shortDate = line.match(/(?:sam|dim|lun|mar|mer|jeu|ven)\w*\.?\s*(\d{2})\/(\d{2})/i);
+            if (shortDate) {
+                const year = new Date().getFullYear();
+                betDate = `${year}-${shortDate[2]}-${shortDate[1]}`;
+                break;
+            }
+        }
+        
         if (betName || match || amount > 0 || odds > 0) {
             bets.push({
                 selected: true,
@@ -5609,7 +5645,9 @@ function parseOcrMultiBets(rawText) {
                 bookmaker: bookmaker,
                 odds: odds,
                 amount: amount,
-                status: status
+                status: status,
+                date: betDate,
+                time: betTime
             });
         }
     });
@@ -5617,7 +5655,8 @@ function parseOcrMultiBets(rawText) {
     if (bets.length === 0) {
         bets.push({
             selected: true, name: '', match: '', team1: '', team2: '',
-            sport: '', bookmaker: bookmaker, odds: 0, amount: 0, status: 'en-cours'
+            sport: '', bookmaker: bookmaker, odds: 0, amount: 0, status: 'en-cours',
+            date: new Date().toISOString().split('T')[0], time: new Date().toTimeString().slice(0, 5)
         });
     }
     
@@ -5674,7 +5713,7 @@ function renderOcrBets() {
                 <input type="text" value="${(bet.match || '').replace(/"/g, '&quot;')}" onchange="ocrDetectedBets[${i}].match = this.value" placeholder="Équipe A vs Équipe B" style="padding: 10px 12px;">
             </div>
             
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
                 <div class="form-group" style="margin-bottom: 0;">
                     <label style="font-size: 0.82em;">Mise (€)</label>
                     <input type="number" step="0.01" value="${bet.amount || ''}" onchange="ocrDetectedBets[${i}].amount = parseFloat(this.value) || 0" placeholder="10.00" style="padding: 10px 12px;">
@@ -5686,6 +5725,10 @@ function renderOcrBets() {
                 <div class="form-group" style="margin-bottom: 0;">
                     <label style="font-size: 0.82em;">Date</label>
                     <input type="date" value="${bet.date || new Date().toISOString().split('T')[0]}" onchange="ocrDetectedBets[${i}].date = this.value" style="padding: 10px 12px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.82em;">Heure</label>
+                    <input type="time" value="${bet.time || new Date().toTimeString().slice(0,5)}" onchange="ocrDetectedBets[${i}].time = this.value" style="padding: 10px 12px;">
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">
                     <label style="font-size: 0.82em;">Statut</label>
@@ -5730,7 +5773,11 @@ function submitAllOcrBets() {
             confidence: 50,
             status: b.status,
             bookmaker: b.bookmaker,
-            date: b.date ? new Date(b.date + 'T12:00:00').toISOString() : new Date().toISOString(),
+            date: (() => {
+                const d = b.date || new Date().toISOString().split('T')[0];
+                const t = b.time || new Date().toTimeString().slice(0, 5);
+                return new Date(d + 'T' + t + ':00').toISOString();
+            })(),
             notes: 'Ajouté via screenshot OCR'
         };
         

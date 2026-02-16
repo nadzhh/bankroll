@@ -8,6 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
@@ -2023,24 +2024,21 @@
                 </div>
 
                 <div class="card" style="margin-top: 24px;">
-                    <h3 class="card-title"><i class="fas fa-cloud" style="color: var(--primary); margin-right: 8px;"></i>Synchronisation Cloud</h3>
+                    <h3 class="card-title"><i class="fas fa-cloud" style="color: var(--primary); margin-right: 8px;"></i>Compte & Synchronisation</h3>
                     <p style="color: var(--text-secondary); font-size: 0.9em; margin-bottom: 16px;">
-                        Vos données sont synchronisées automatiquement. Utilisez l'ID ci-dessous pour connecter un autre appareil.
+                        Vos données sont synchronisées automatiquement via votre compte. Connectez-vous avec le même e-mail sur un autre appareil pour retrouver vos paris.
                     </p>
                     
-                    <div id="cloudInfo"></div>
-                    
-                    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
-                        <label style="margin-bottom: 8px;">Connecter un autre appareil</label>
-                        <p style="color: var(--text-secondary); font-size: 0.85em; margin-bottom: 12px;">
-                            Collez l'ID de synchronisation de votre autre appareil pour récupérer vos données :
-                        </p>
-                        <div style="display: flex; gap: 8px;">
-                            <input type="text" id="binIdInput" placeholder="Collez l'ID ici..." style="flex: 1;">
-                            <button class="btn" onclick="connectToBin()">
-                                <i class="fas fa-link"></i> Connecter
-                            </button>
+                    <div style="padding:16px;background:var(--bg-secondary);border-radius:12px;">
+                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+                            <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--info));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;" id="settingsAvatar">?</div>
+                            <div>
+                                <div style="font-weight:700;" id="settingsEmail">-</div>
+                                <div style="font-size:0.8em;color:var(--text-secondary);">Connecté</div>
+                            </div>
                         </div>
+                        <button class="btn btn-sm" onclick="_doFirestoreSync()"><i class="fas fa-sync-alt"></i> Forcer la synchronisation</button>
+                        <button class="btn btn-sm btn-secondary" style="margin-left:8px;" onclick="doLogout()"><i class="fas fa-sign-out-alt"></i> Déconnexion</button>
                     </div>
                 </div>
 
@@ -2408,6 +2406,7 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
+const db = firebase.firestore();
 
 let currentUser = null;
 
@@ -2658,23 +2657,19 @@ function customConfirm(title, message, icon = '⚠️', okText = 'Confirmer', da
 }
 
 // ===================================
-// DATA & STATE + JSONBIN SYNC
+// DATA & STATE + FIRESTORE SYNC
 // ===================================
-const JSONBIN_ACCESS_KEY = '$2a$10$88c8JbIkwDurineaXh4r0eZbBFd1BcccRkGtfonBD9MQ8Qq41Sd8e';
-const JSONBIN_MASTER_KEY = '$2a$10$7JRhURu5916XXuZSR3qoHuxlh9cxOjaSGpeQOKme2d13aM1Zyq.Yy';
-let JSONBIN_BIN_ID = localStorage.getItem('jsonbin_bin_id') || null;
 let isSyncing = false;
 let syncQueue = false;
 
-let bankrolls = JSON.parse(localStorage.getItem('bankrolls')) || [];
-let currentBankrollId = localStorage.getItem('currentBankrollId') || null;
+let bankrolls = [];
+let currentBankrollId = null;
 let charts = {};
 let matchIndex = 1;
 let editingBetId = null;
 
-// Initialize
-if (bankrolls.length === 0) {
-    bankrolls.push({
+function createDefaultBankroll() {
+    return {
         id: Date.now(),
         name: 'Bankroll Principale',
         initialAmount: 1000,
@@ -2682,27 +2677,110 @@ if (bankrolls.length === 0) {
         bookmakers: {},
         bets: [],
         createdAt: new Date().toISOString()
-    });
-    currentBankrollId = bankrolls[0].id;
-    saveData();
+    };
 }
-
-if (!currentBankrollId) currentBankrollId = bankrolls[0].id;
 
 function getCurrentBankroll() {
     return bankrolls.find(b => b.id == currentBankrollId);
 }
 
 function saveData() {
-    // Always save locally first (instant)
+    // Save locally (instant)
     localStorage.setItem('bankrolls', JSON.stringify(bankrolls));
     localStorage.setItem('currentBankrollId', currentBankrollId);
-    localStorage.setItem('lastSyncDate', new Date().toISOString());
-    // Sync to cloud
-    syncToCloud();
+    // Sync to Firestore
+    syncToFirestore();
 }
 
-// Show sync status
+// Debounced Firestore sync
+let syncTimeout = null;
+function syncToFirestore() {
+    clearTimeout(syncTimeout);
+    syncTimeout = setTimeout(() => _doFirestoreSync(), 1000);
+}
+
+async function _doFirestoreSync() {
+    if (!currentUser) return;
+    if (isSyncing) { syncQueue = true; return; }
+    isSyncing = true;
+    showSyncStatus('syncing');
+
+    try {
+        const userDoc = db.collection('users').doc(currentUser.uid);
+        await userDoc.set({
+            bankrolls: JSON.parse(JSON.stringify(bankrolls)),
+            currentBankrollId: currentBankrollId,
+            lastUpdated: new Date().toISOString(),
+            email: currentUser.email
+        });
+        showSyncStatus('ok');
+    } catch(e) {
+        console.error('Firestore sync error:', e);
+        showSyncStatus('error');
+    } finally {
+        isSyncing = false;
+        if (syncQueue) {
+            syncQueue = false;
+            syncToFirestore();
+        }
+    }
+}
+
+async function loadFromFirestore() {
+    if (!currentUser) return false;
+    showSyncStatus('syncing');
+    
+    try {
+        const doc = await db.collection('users').doc(currentUser.uid).get();
+        
+        if (doc.exists) {
+            const data = doc.data();
+            if (data.bankrolls && data.bankrolls.length > 0) {
+                bankrolls = data.bankrolls;
+                currentBankrollId = data.currentBankrollId || bankrolls[0].id;
+                localStorage.setItem('bankrolls', JSON.stringify(bankrolls));
+                localStorage.setItem('currentBankrollId', currentBankrollId);
+                showSyncStatus('ok');
+                return true;
+            }
+        }
+        
+        // No data in Firestore: check if local data exists (first-time migration)
+        const localBankrolls = JSON.parse(localStorage.getItem('bankrolls')) || [];
+        if (localBankrolls.length > 0 && localBankrolls[0].bets && localBankrolls[0].bets.length > 0) {
+            // Migrate local data to Firestore
+            bankrolls = localBankrolls;
+            currentBankrollId = localStorage.getItem('currentBankrollId') || bankrolls[0].id;
+            await _doFirestoreSync();
+            showSyncStatus('ok');
+            return true;
+        }
+        
+        // Brand new user: create default bankroll
+        bankrolls = [createDefaultBankroll()];
+        currentBankrollId = bankrolls[0].id;
+        await _doFirestoreSync();
+        showSyncStatus('ok');
+        return true;
+        
+    } catch(e) {
+        console.error('Firestore load error:', e);
+        showSyncStatus('error');
+        
+        // Fallback to localStorage
+        const localBankrolls = JSON.parse(localStorage.getItem('bankrolls')) || [];
+        if (localBankrolls.length > 0) {
+            bankrolls = localBankrolls;
+            currentBankrollId = localStorage.getItem('currentBankrollId') || bankrolls[0].id;
+        } else {
+            bankrolls = [createDefaultBankroll()];
+            currentBankrollId = bankrolls[0].id;
+        }
+        return false;
+    }
+}
+
+// Show sync status indicator
 function showSyncStatus(status) {
     let indicator = document.getElementById('syncIndicator');
     if (!indicator) {
@@ -2735,182 +2813,6 @@ function showSyncStatus(status) {
     }
 }
 
-// Create a new bin
-async function createBin() {
-    try {
-        const res = await fetch('https://api.jsonbin.io/v3/b', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Master-Key': JSONBIN_MASTER_KEY,
-                'X-Bin-Name': 'bet-tracker-data',
-                'X-Bin-Private': 'false'
-            },
-            body: JSON.stringify({
-                bankrolls: bankrolls,
-                currentBankrollId: currentBankrollId,
-                lastUpdated: new Date().toISOString()
-            })
-        });
-        const data = await res.json();
-        if (data.metadata && data.metadata.id) {
-            JSONBIN_BIN_ID = data.metadata.id;
-            localStorage.setItem('jsonbin_bin_id', JSONBIN_BIN_ID);
-            return true;
-        }
-    } catch(e) { console.error('Create bin error:', e); }
-    return false;
-}
-
-// Sync to cloud (debounced)
-let syncTimeout = null;
-function syncToCloud() {
-    clearTimeout(syncTimeout);
-    syncTimeout = setTimeout(() => _doSync(), 1500);
-}
-
-async function _doSync() {
-    if (isSyncing) { syncQueue = true; return; }
-    isSyncing = true;
-    showSyncStatus('syncing');
-
-    try {
-        if (!JSONBIN_BIN_ID) {
-            const created = await createBin();
-            if (!created) {
-                showSyncStatus('error');
-                return;
-            }
-        }
-        
-        if (JSONBIN_BIN_ID) {
-            const payload = {
-                bankrolls: bankrolls,
-                currentBankrollId: currentBankrollId,
-                lastUpdated: new Date().toISOString()
-            };
-            
-            const res = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Master-Key': JSONBIN_MASTER_KEY
-                },
-                body: JSON.stringify(payload)
-            });
-            
-            if (res.ok) {
-                showSyncStatus('ok');
-            } else {
-                const errData = await res.json().catch(() => ({}));
-                console.error('Sync error:', res.status, errData);
-                // If bin not found, reset and recreate
-                if (res.status === 404 || res.status === 401 || res.status === 403) {
-                    JSONBIN_BIN_ID = null;
-                    localStorage.removeItem('jsonbin_bin_id');
-                    const created = await createBin();
-                    if (created) {
-                        showSyncStatus('ok');
-                    } else {
-                        showSyncStatus('error');
-                    }
-                } else {
-                    showSyncStatus('error');
-                }
-            }
-        }
-    } catch(e) {
-        console.error('Sync error:', e);
-        showSyncStatus('error');
-    } finally {
-        isSyncing = false;
-        if (syncQueue) {
-            syncQueue = false;
-            syncToCloud();
-        }
-    }
-}
-
-// Load from cloud on startup
-async function loadFromCloud() {
-    if (!JSONBIN_BIN_ID) return false;
-    
-    showSyncStatus('syncing');
-    try {
-        const res = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
-            headers: { 'X-Master-Key': JSONBIN_MASTER_KEY }
-        });
-        
-        if (res.ok) {
-            const data = await res.json();
-            const record = data.record;
-            
-            if (record && record.bankrolls && record.bankrolls.length > 0) {
-                // Check which is newer: local or cloud
-                const cloudDate = new Date(record.lastUpdated || 0);
-                const localDate = new Date(localStorage.getItem('lastSyncDate') || 0);
-                
-                if (cloudDate >= localDate || bankrolls.length <= 1 && bankrolls[0]?.bets?.length === 0) {
-                    bankrolls = record.bankrolls;
-                    currentBankrollId = record.currentBankrollId || bankrolls[0].id;
-                    localStorage.setItem('bankrolls', JSON.stringify(bankrolls));
-                    localStorage.setItem('currentBankrollId', currentBankrollId);
-                    showSyncStatus('ok');
-                    return true;
-                }
-            }
-            showSyncStatus('ok');
-        } else {
-            showSyncStatus('error');
-        }
-    } catch(e) {
-        console.error('Load from cloud error:', e);
-        showSyncStatus('error');
-    }
-    return false;
-}
-
-// Manual sync button for settings
-function forceSyncNow() {
-    _doSync();
-}
-
-// Show bin ID in settings for cross-device setup
-function showCloudInfo() {
-    const el = document.getElementById('cloudInfo');
-    if (!el) return;
-    if (JSONBIN_BIN_ID) {
-        el.innerHTML = `
-            <div style="padding:16px;background:var(--bg-secondary);border-radius:12px;margin-top:12px;">
-                <div style="font-size:0.85em;color:var(--text-secondary);margin-bottom:8px;">ID de synchronisation (à noter pour connecter un autre appareil) :</div>
-                <div style="display:flex;gap:8px;align-items:center;">
-                    <code style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:0.85em;word-break:break-all;color:var(--primary);font-weight:600;">${JSONBIN_BIN_ID}</code>
-                    <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText('${JSONBIN_BIN_ID}');this.innerHTML='<i class=\\'fas fa-check\\'></i> Copié'"><i class="fas fa-copy"></i></button>
-                </div>
-                <div style="margin-top:12px;">
-                    <button class="btn btn-sm" onclick="forceSyncNow()"><i class="fas fa-sync-alt"></i> Forcer la synchronisation</button>
-                </div>
-            </div>
-        `;
-    } else {
-        el.innerHTML = `<div style="padding:12px;color:var(--text-secondary);font-size:0.9em;">Synchronisation en cours de configuration...</div>`;
-    }
-}
-
-// Connect to existing bin (from another device)
-function connectToBin() {
-    const id = document.getElementById('binIdInput').value.trim();
-    if (id) {
-        JSONBIN_BIN_ID = id;
-        localStorage.setItem('jsonbin_bin_id', id);
-        loadFromCloud().then(loaded => {
-            if (loaded) {
-                updateDashboard();
-                showCloudInfo();
-            }
-        });
-    }
-}
 
 // ===================================
 // NAVIGATION
@@ -2929,6 +2831,10 @@ document.querySelectorAll('.nav-item').forEach(item => {
         if (page === 'optimizer') updateOptimizer();
         if (page === 'pronostics') updatePronostics();
         if (page === 'bankrolls') updateBankrollsPage();
+        if (page === 'settings' && currentUser) {
+            document.getElementById('settingsEmail').textContent = currentUser.email;
+            document.getElementById('settingsAvatar').textContent = currentUser.email.charAt(0).toUpperCase();
+        }
     });
 });
 
@@ -4975,6 +4881,12 @@ async function resetAll() {
             true
         );
         if (second) {
+            // Clear Firestore
+            if (currentUser) {
+                try {
+                    await db.collection('users').doc(currentUser.uid).delete();
+                } catch(e) { console.error('Firestore delete error:', e); }
+            }
             localStorage.clear();
             location.reload();
         }
@@ -6204,23 +6116,24 @@ document.getElementById('liveSportFilter').addEventListener('change', () => {
 // INIT
 // ===================================
 
-// Load from cloud first, then update UI
-(async function init() {
-    updateDashboard();
+// Update the auth handler to load data after login
+const originalOnAuthReady = onAuthReady;
+onAuthReady = async function(user) {
+    originalOnAuthReady(user);
     
-    // Try loading from cloud
-    const loaded = await loadFromCloud();
-    if (loaded) {
+    if (user) {
+        // User logged in: load their data from Firestore
+        await loadFromFirestore();
         updateDashboard();
+    } else {
+        // User logged out: clear local state
+        bankrolls = [];
+        currentBankrollId = null;
     }
-    
-    // Create bin if first time
-    if (!JSONBIN_BIN_ID) {
-        await createBin();
-    }
-    
-    showCloudInfo();
-})();
+};
+
+// Re-trigger auth check
+auth.onAuthStateChanged(onAuthReady);
 
 // Load matches when pronostics page is shown
 const origNav = document.querySelectorAll('.nav-item');
@@ -6230,9 +6143,6 @@ origNav.forEach(item => {
         if (item.dataset.page === 'pronostics' && !matchesLoaded) {
             matchesLoaded = true;
             setTimeout(() => loadTodayMatches(), 300);
-        }
-        if (item.dataset.page === 'settings') {
-            showCloudInfo();
         }
     });
 });

@@ -4996,6 +4996,13 @@ function parseOcrMultiBets(rawText) {
     else if (/pmu|parions\s*sport/i.test(text)) bookmaker = 'PMU';
     else if (/pokerstars/i.test(text)) bookmaker = 'Pokerstars';
     else if (/bwin/i.test(text)) bookmaker = 'Bwin';
+    // Indirect detection: Betclic uses "Réf" + hex ID + "Partager" format
+    if (!bookmaker && /Réf\s+[a-f0-9]{10,}/i.test(text) && /Partager/i.test(text)) {
+        bookmaker = 'Betclic';
+    }
+    if (!bookmaker && /simple\s*\(\s*(?:perdu|gagn)/i.test(text)) {
+        bookmaker = 'Betclic';
+    }
     
     // ---- SPLIT TEXT INTO BET BLOCKS by "Mise" lines ----
     const misePositions = [];
@@ -5072,29 +5079,39 @@ function parseOcrMultiBets(rawText) {
         }
         
         // ---- EXTRACT COTE ----
-        // Look for standalone decimal that looks like odds: 1,47 / 1.45 / @ 1.50
+        // Priority 1: Calculate from gains/mise (most reliable for Betclic)
         let odds = 0;
-        for (const line of block) {
-            // Explicit patterns: "@ 1,50", "x @ 1,50", "Cote 1.85"
-            const m = line.match(/[@x]\s*(\d+[.,]\d+)/i) || line.match(/cote\s*[:\-]?\s*(\d+[.,]\d+)/i);
-            if (m) {
-                const val = parseFloat(m[1].replace(',', '.'));
-                if (val >= 1.01 && val <= 50) { odds = val; break; }
-            }
+        if (amount > 0 && gains > 0) {
+            odds = parseFloat((gains / amount).toFixed(2));
         }
-        // Look for isolated odds number (standalone decimal on a line, typical on Betclic)
+        // Priority 2: Explicit patterns if no gains available
         if (!odds) {
             for (const line of block) {
-                // Match lines that are just a number like "1,47" or "1.45" (Betclic yellow badge)
+                const m = line.match(/cote\s*[:\-]?\s*(\d+[.,]\d+)/i);
+                if (m) {
+                    const val = parseFloat(m[1].replace(',', '.'));
+                    if (val >= 1.01 && val <= 50) { odds = val; break; }
+                }
+            }
+        }
+        // Priority 3: Isolated decimal on its own line (Betclic badge)
+        if (!odds) {
+            for (const line of block) {
                 if (/^\d+[.,]\d{2}$/.test(line.trim())) {
                     const val = parseFloat(line.trim().replace(',', '.'));
                     if (val >= 1.01 && val <= 20) { odds = val; break; }
                 }
             }
         }
-        // Calculate from gains/mise as fallback
-        if (!odds && amount > 0 && gains > 0) {
-            odds = parseFloat((gains / amount).toFixed(2));
+        // Priority 4: "@ X,XX" pattern
+        if (!odds) {
+            for (const line of block) {
+                const m = line.match(/[@]\s*(\d+[.,]\d+)/);
+                if (m) {
+                    const val = parseFloat(m[1].replace(',', '.'));
+                    if (val >= 1.01 && val <= 50) { odds = val; break; }
+                }
+            }
         }
         
         // ---- DETECT STATUS ----
@@ -5131,10 +5148,11 @@ function parseOcrMultiBets(rawText) {
             if (/^gains?/i.test(line)) return true;
             if (/partager|réf\s|simple|combin|en\s*cours|termin|gagn|perdu/i.test(line)) return true;
             if (/^\d+[.,]\d+\s*€/.test(line)) return true;           // "10,70 €"
+            if (/€/.test(line)) return true;                          // Any line with €
+            if (/@/.test(line)) return true;                          // Any line with @ (odds line)
             if (/^\d+[.,]\d{2}$/.test(line)) return true;            // "1,47" (cote)
             if (/^\d{2}\/\d{2}/.test(line)) return true;             // "14/02/2026"
             if (/^(sam|dim|lun|mar|mer|jeu|ven)\./i.test(line)) return true; // "Sam. 14/02"
-            if (/^[@x]\s*\d/i.test(line)) return true;               // "@ 1,50"
             if (/^\d{2}:\d{2}/.test(line)) return true;              // "10:03"
             if (/^\+\s*de\s+\d/i.test(line)) return true;            // "+ de 21,5"
             if (/^\-\s*de\s+\d/i.test(line)) return true;            // "- de 21,5"
@@ -5143,9 +5161,13 @@ function parseOcrMultiBets(rawText) {
             if (/QT\s*[-–]/i.test(line)) return true;
             if (/^\d+\s+\d+\s+\d+/.test(line)) return true;         // Score lines: "32 35 35 18 120"
             if (/^\d+$/.test(line)) return true;                     // Just a number
+            if (/^\d+\s+\d+$/.test(line)) return true;               // "8 17 8" type noise
             if (line.length < 3) return true;
             if (line.length > 50) return true;
             if (/victoire|vainqueur|btts|handicap|score\s*exact|double\s*chance|1n2/i.test(line)) return true;
+            if (/^\(?\s*\d+\s*\)/.test(line)) return true;           // "(1)" type lines
+            if (/^x\s/i.test(line)) return true;                     // "x @" type lines
+            if (/ERIE/i.test(line)) return true;                      // OCR artifacts
             return false;
         };
         

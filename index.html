@@ -4997,120 +4997,169 @@ function parseOcrMultiBets(rawText) {
     else if (/pokerstars/i.test(text)) bookmaker = 'Pokerstars';
     else if (/bwin/i.test(text)) bookmaker = 'Bwin';
     
-    // ---- MULTI-BET DETECTION ----
-    // Strategy: find all "match" lines (team vs team) and associate nearby odds/stakes
+    // ---- SPLIT TEXT INTO BET BLOCKS ----
+    // Betclic/Winamax/Unibet separate bets by "Partager", "Réf", "simple", "combiné"
+    const blockSplitRegex = /(?:^|\n)\s*(?:\(?(?:\d+\))?\s*Partager|Réf\s+[a-f0-9]|simple\s*\(|combiné\s*\(|combin[ée]\s*\()/im;
     
-    const bets = [];
-    
-    // Find all match-like lines: "Team A - Team B", "Team A vs Team B"
-    const matchLines = [];
+    // Alternative: split by "Mise X,XX €" as each bet has one
+    const misePositions = [];
     lines.forEach((line, idx) => {
-        // Team vs Team patterns
-        if (/(.{2,35})\s+(?:vs\.?|[-–—])\s+(.{2,35})/i.test(line) && !/\d+[.,]\d+\s*€/.test(line) && !/mise|gain|cote|total/i.test(line)) {
-            const m = line.match(/(.{2,35})\s+(?:vs\.?|[-–—])\s+(.{2,35})/i);
-            if (m) {
-                matchLines.push({ idx, team1: m[1].trim(), team2: m[2].trim(), line });
-            }
+        if (/^mise\s+\d+[.,]\d+\s*€?$/i.test(line)) {
+            misePositions.push(idx);
         }
     });
     
-    // For each match, look for nearby odds, bet type, stake
-    matchLines.forEach(ml => {
-        const contextLines = lines.slice(Math.max(0, ml.idx - 3), Math.min(lines.length, ml.idx + 6));
-        const context = contextLines.join(' ');
-        
-        // Find odds nearby
-        let odds = 0;
-        const oddsMatches = context.match(/(\d+[.,]\d{2})/g);
-        if (oddsMatches) {
-            for (const om of oddsMatches) {
-                const val = parseFloat(om.replace(',', '.'));
-                if (val >= 1.01 && val <= 50) { odds = val; break; }
-            }
-        }
-        
-        // Find bet type nearby
-        let betName = `${ml.team1} vs ${ml.team2}`;
-        const typePatterns = [
-            /victoire\s+(.+)/i, /(vainqueur|gagnant)\s*[:\-]?\s*(.+)/i,
-            /(btts|les deux marquent|les 2 marquent)/i,
-            /(plus de|over)\s*\d+[.,]?\d*/i, /(moins de|under)\s*\d+[.,]?\d*/i,
-            /(handicap\s*[+-]?\s*\d+)/i, /(score exact|mi-temps|1x2|double chance)/i,
-            /(résultat|1N2)/i, /(match nul|nul)/i
-        ];
-        for (const cl of contextLines) {
-            for (const tp of typePatterns) {
-                const m = cl.match(tp);
-                if (m) {
-                    betName = `${ml.team1} vs ${ml.team2} — ${m[0].trim()}`;
-                    break;
+    let betBlocks = [];
+    
+    if (misePositions.length >= 1) {
+        // Split into blocks: each block ends at "Mise" line + a few lines after
+        // The bet info is ABOVE the Mise line
+        misePositions.forEach((miseIdx, i) => {
+            // Find the start: either after previous block or from beginning
+            let startIdx;
+            if (i === 0) {
+                startIdx = 0;
+            } else {
+                // Start after previous mise + some padding (Gains, Partager, Réf lines)
+                startIdx = misePositions[i - 1] + 1;
+                // Skip past "Gains", "Partager", "Réf" lines after previous mise
+                while (startIdx < miseIdx && /^(gains|partager|réf|\(\d|[€$]|^\s*$)/i.test(lines[startIdx])) {
+                    startIdx++;
                 }
             }
-        }
-        
-        // Find stake
-        let amount = 0;
-        const stakeMatch = context.match(/(?:mise|montant|enjeu)\s*[:\-]?\s*(\d+[.,]?\d*)\s*[€e]?/i) 
-            || context.match(/(\d+[.,]\d{2})\s*€/);
-        if (stakeMatch) {
-            amount = parseFloat(stakeMatch[1].replace(',', '.'));
-        }
-        
-        const sport = detectSport(context) || detectSport(betName) || 'Football';
-        
-        bets.push({
-            selected: true,
-            name: betName,
-            match: `${ml.team1} vs ${ml.team2}`,
-            team1: ml.team1,
-            team2: ml.team2,
-            sport: sport,
-            bookmaker: bookmaker,
-            odds: odds,
-            amount: amount,
-            status: 'en-cours'
-        });
-    });
-    
-    // If no match lines found, try to find individual bets by odds pattern
-    if (bets.length === 0) {
-        // Fallback: split by odds patterns or recurring structures
-        const oddsRegex = /(\d+[.,]\d{2})/g;
-        let allOdds = [];
-        let m;
-        while ((m = oddsRegex.exec(text)) !== null) {
-            const val = parseFloat(m[1].replace(',', '.'));
-            if (val >= 1.01 && val <= 50) {
-                allOdds.push({ val, idx: m.index });
-            }
-        }
-        
-        // Try to find meaningful text before each odds
-        allOdds.forEach((o, i) => {
-            const textBefore = text.substring(i > 0 ? allOdds[i-1].idx + 5 : 0, o.idx).trim();
-            const meaningfulLines = textBefore.split('\n').map(l => l.trim()).filter(l => l.length > 3 && !/^\d+[.,]?\d*\s*€?$/.test(l));
             
-            if (meaningfulLines.length > 0) {
-                const betLine = meaningfulLines[meaningfulLines.length - 1];
-                const sport = detectSport(betLine) || 'Football';
-                
-                bets.push({
-                    selected: true,
-                    name: betLine.substring(0, 60),
-                    match: betLine.substring(0, 60),
-                    team1: '',
-                    team2: '',
-                    sport: sport,
-                    bookmaker: bookmaker,
-                    odds: o.val,
-                    amount: 0,
-                    status: 'en-cours'
-                });
-            }
+            // The block is from startIdx to miseIdx (inclusive)
+            const blockLines = lines.slice(startIdx, miseIdx + 3); // +3 to include Gains line
+            betBlocks.push(blockLines);
         });
+    } else {
+        // Can't split by Mise, treat entire text as one block
+        betBlocks = [lines];
     }
     
-    // If still nothing, create one empty bet for manual fill
+    // ---- PARSE EACH BLOCK ----
+    const bets = [];
+    
+    betBlocks.forEach(block => {
+        const blockText = block.join('\n');
+        const blockTextLower = blockText.toLowerCase();
+        
+        // Extract mise
+        let amount = 0;
+        const miseMatch = blockText.match(/mise\s+(\d+[.,]\d+)\s*€?/i);
+        if (miseMatch) amount = parseFloat(miseMatch[1].replace(',', '.'));
+        
+        // Extract gains
+        let gains = 0;
+        const gainsMatch = blockText.match(/gains?\s+(?:a\s+)?(\d+[.,]\d+)\s*€?/i);
+        if (gainsMatch) gains = parseFloat(gainsMatch[1].replace(',', '.'));
+        
+        // Extract odds from "@" pattern or "Cote" pattern
+        let odds = 0;
+        const oddsMatch = blockText.match(/@\s*(\d+[.,]\d+)/) 
+            || blockText.match(/cote\s*[:\-]?\s*(\d+[.,]\d+)/i)
+            || blockText.match(/x\s*@?\s*(\d+[.,]\d+)/i);
+        if (oddsMatch) {
+            odds = parseFloat(oddsMatch[1].replace(',', '.'));
+        }
+        // Calculate odds from mise/gains if not found
+        if (!odds && amount > 0 && gains > 0) {
+            odds = parseFloat((gains / amount).toFixed(2));
+        }
+        
+        // Detect status
+        let status = 'en-cours';
+        if (/\(?\s*perdu\s*\)?/i.test(blockText) || (/gains?\s+(?:a\s+)?0[.,]00/i.test(blockText))) {
+            status = 'perdu';
+        } else if (/\(?\s*gagn[ée]\s*\)?/i.test(blockText) || (gains > 0 && gains > amount)) {
+            status = 'gagne';
+        } else if (/en\s*cours/i.test(blockText)) {
+            status = 'en-cours';
+        }
+        
+        // Find bet type / name: look for patterns like "+ de 21,5", "Victoire", "BTTS", etc.
+        let betName = '';
+        const betTypeLines = [];
+        block.forEach(line => {
+            if (/^\+\s*de\s+\d/i.test(line) || /^\-\s*de\s+\d/i.test(line) ||
+                /nombre\s*total/i.test(line) || /résultat/i.test(line) ||
+                /victoire/i.test(line) || /btts/i.test(line) ||
+                /les\s*(2|deux)\s*marqu/i.test(line) || /handicap/i.test(line) ||
+                /score\s*exact/i.test(line) || /vainqueur/i.test(line) ||
+                /mi[\s-]temps/i.test(line) || /1n2/i.test(line) ||
+                /double\s*chance/i.test(line) || /match\s*nul/i.test(line) ||
+                /over|under/i.test(line) || /clean[\s-]?sheet/i.test(line)) {
+                betTypeLines.push(line);
+            }
+        });
+        if (betTypeLines.length > 0) {
+            betName = betTypeLines.join(' — ');
+        }
+        
+        // Find match: look for team-like names (not numbers, not mise/gains/status)
+        let match = '';
+        let team1 = '', team2 = '';
+        const skipPatterns = /^(mise|gains?|partager|réf|simple|combin|en\s*cours|termin|gagn|perd|\(|\d+[.,]\d+\s*€|x\s*@|sam|dim|lun|mar|mer|jeu|ven|\d{2}\/\d{2})/i;
+        const scoreLinePattern = /\d{2,}\s+\d{2,}\s*\d*\s*\d*\s+\d{2,}/; // Score lines like "32 35 35 18 120"
+        const teamCandidates = [];
+        
+        block.forEach(line => {
+            if (skipPatterns.test(line)) return;
+            if (scoreLinePattern.test(line)) return;
+            if (/^\d+[.,]?\d*$/.test(line)) return;
+            if (/^\+\s*de\s+\d/i.test(line) || /^\-\s*de\s+\d/i.test(line)) return;
+            if (/nombre\s*total|résultat|victoire|btts|handicap/i.test(line)) return;
+            if (line.length < 3 || line.length > 50) return;
+            
+            // Likely a team name or match line
+            // Check for "vs" or "-" separator
+            const vsMatch = line.match(/(.{2,30})\s+(?:vs\.?|[-–—])\s+(.{2,30})/i);
+            if (vsMatch) {
+                team1 = vsMatch[1].trim();
+                team2 = vsMatch[2].trim();
+                match = `${team1} vs ${team2}`;
+            } else {
+                teamCandidates.push(line);
+            }
+        });
+        
+        // If no vs pattern, use first 2 team candidates
+        if (!match && teamCandidates.length >= 2) {
+            team1 = teamCandidates[0];
+            team2 = teamCandidates[1];
+            match = `${team1} vs ${team2}`;
+        } else if (!match && teamCandidates.length === 1) {
+            match = teamCandidates[0];
+            team1 = teamCandidates[0];
+        }
+        
+        // Build bet name
+        if (!betName && match) betName = match;
+        if (betName && match && !betName.includes(team1) && team1) {
+            betName = `${match} — ${betName}`;
+        }
+        
+        // Detect sport
+        const sport = detectSport(blockText) || detectSport(betName) || detectSport(match) || '';
+        
+        // Only add if we found meaningful content
+        if (betName || match || amount > 0 || odds > 0) {
+            bets.push({
+                selected: true,
+                name: betName || match || 'Pari détecté',
+                match: match,
+                team1: team1,
+                team2: team2,
+                sport: sport,
+                bookmaker: bookmaker,
+                odds: odds,
+                amount: amount,
+                status: status
+            });
+        }
+    });
+    
+    // If nothing found at all, create one empty bet
     if (bets.length === 0) {
         bets.push({
             selected: true,
@@ -5124,16 +5173,6 @@ function parseOcrMultiBets(rawText) {
             amount: 0,
             status: 'en-cours'
         });
-    }
-    
-    // Find global stake if individual stakes not found
-    const globalStakeMatch = text.match(/(?:mise|montant|total|enjeu)\s*(?:total)?\s*[:\-]?\s*(\d+[.,]?\d*)\s*[€e]/i)
-        || text.match(/(\d+[.,]\d{2})\s*€/);
-    if (globalStakeMatch) {
-        const globalAmount = parseFloat(globalStakeMatch[1].replace(',', '.'));
-        if (globalAmount > 0 && globalAmount < 100000) {
-            bets.forEach(b => { if (!b.amount) b.amount = globalAmount; });
-        }
     }
     
     ocrDetectedBets = bets;

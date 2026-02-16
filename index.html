@@ -1803,81 +1803,28 @@
                     <div style="padding: 16px; background: rgba(16,185,129,0.1); border: 1px solid var(--success); border-radius: 12px; margin-bottom: 16px;">
                         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                             <i class="fas fa-check-circle" style="color: var(--success);"></i>
-                            <span style="font-weight: 700; color: var(--success);">Détection terminée</span>
+                            <span style="font-weight: 700; color: var(--success);" id="ocrDetectedCount">Détection terminée</span>
                         </div>
-                        <p style="font-size: 0.85em; color: var(--text-secondary);">Vérifiez et corrigez les informations ci-dessous avant de valider.</p>
+                        <p style="font-size: 0.85em; color: var(--text-secondary);">Vérifiez et corrigez les informations ci-dessous. Décochez les paris que vous ne souhaitez pas ajouter.</p>
                     </div>
 
-                    <div class="form-group">
-                        <label>Nom du Pari détecté</label>
-                        <input type="text" id="ocrBetName" placeholder="Nom du pari">
-                    </div>
+                    <div id="ocrBetsList"></div>
 
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Sport</label>
-                            <select id="ocrSport">
-                                <option value="">Sélectionner</option>
-                                <option value="Football">Football</option>
-                                <option value="Basketball">Basketball</option>
-                                <option value="Tennis">Tennis</option>
-                                <option value="Rugby">Rugby</option>
-                                <option value="MMA">MMA</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Bookmaker</label>
-                            <select id="ocrBookmaker">
-                                <option value="">Sélectionner</option>
-                                <option value="Betclic">Betclic</option>
-                                <option value="Unibet">Unibet</option>
-                                <option value="Winamax">Winamax</option>
-                                <option value="PMU">PMU</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Match</label>
-                        <input type="text" id="ocrMatch" placeholder="Équipe A vs Équipe B">
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Mise (€)</label>
-                            <input type="number" step="0.01" id="ocrAmount" placeholder="10.00">
-                        </div>
-                        <div class="form-group">
-                            <label>Cote</label>
-                            <input type="number" step="0.01" id="ocrOdds" placeholder="1.85">
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Gain potentiel (€)</label>
-                            <input type="number" step="0.01" id="ocrPotentialWin" placeholder="18.50" disabled style="opacity: 0.7;">
-                        </div>
-                        <div class="form-group">
-                            <label>Statut</label>
-                            <select id="ocrStatus">
-                                <option value="en-cours">En cours</option>
-                                <option value="gagne">Gagné</option>
-                                <option value="perdu">Perdu</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div id="ocrRawText" style="display: none; margin-bottom: 16px;">
+                    <div id="ocrRawText" style="margin-bottom: 16px; margin-top: 16px;">
                         <label style="cursor: pointer;" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
                             <i class="fas fa-eye"></i> Voir le texte brut détecté
                         </label>
                         <pre style="display: none; margin-top: 8px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; font-size: 0.8em; color: var(--text-secondary); white-space: pre-wrap; max-height: 150px; overflow-y: auto;" id="ocrRawContent"></pre>
                     </div>
 
-                    <button type="button" class="btn" style="width: 100%;" onclick="submitOcrBet()">
-                        <i class="fas fa-check"></i> Ajouter ce pari
-                    </button>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" class="btn" style="flex: 1;" onclick="submitAllOcrBets()">
+                            <i class="fas fa-check-double"></i> Ajouter les paris sélectionnés
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="resetScreenshotForm()">
+                            <i class="fas fa-redo"></i> Refaire
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -4965,6 +4912,8 @@ function updatePronoRecommendations() {
 // SCREENSHOT OCR - TESSERACT.JS
 // ===================================
 
+let ocrDetectedBets = [];
+
 // Drag & drop support
 const dropzone = document.getElementById('screenshotDropzone');
 if (dropzone) {
@@ -4990,7 +4939,6 @@ if (dropzone) {
 async function handleScreenshot(file) {
     if (!file || !file.type.startsWith('image/')) return;
     
-    // Show preview
     const reader = new FileReader();
     reader.onload = (e) => {
         document.getElementById('screenshotPreviewArea').innerHTML = `
@@ -5000,7 +4948,6 @@ async function handleScreenshot(file) {
     };
     reader.readAsDataURL(file);
     
-    // Show progress
     document.getElementById('ocrProgressArea').style.display = 'block';
     document.getElementById('ocrResultArea').style.display = 'none';
     
@@ -5021,8 +4968,7 @@ async function handleScreenshot(file) {
         const { data: { text } } = await worker.recognize(file);
         await worker.terminate();
         
-        // Parse the extracted text
-        parseOcrText(text);
+        parseOcrMultiBets(text);
         
     } catch(err) {
         console.error('OCR Error:', err);
@@ -5036,214 +4982,288 @@ async function handleScreenshot(file) {
     }
 }
 
-function parseOcrText(rawText) {
+function parseOcrMultiBets(rawText) {
     const text = rawText.trim();
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    const lowerText = text.toLowerCase();
     
-    // Show raw text
     document.getElementById('ocrRawContent').textContent = text;
-    document.getElementById('ocrRawText').style.display = 'block';
     
-    // Detect bookmaker
+    // Detect bookmaker (global)
     let bookmaker = '';
     if (/betclic/i.test(text)) bookmaker = 'Betclic';
     else if (/winamax/i.test(text)) bookmaker = 'Winamax';
     else if (/unibet/i.test(text)) bookmaker = 'Unibet';
-    else if (/pmu/i.test(text)) bookmaker = 'PMU';
-    else if (/parions\s*sport/i.test(text)) bookmaker = 'PMU';
+    else if (/pmu|parions\s*sport/i.test(text)) bookmaker = 'PMU';
+    else if (/pokerstars/i.test(text)) bookmaker = 'Pokerstars';
+    else if (/bwin/i.test(text)) bookmaker = 'Bwin';
     
-    // Detect odds - look for patterns like "1.85", "2,10", "Cote: 1.85", "@1.85"
-    let odds = '';
-    const oddsPatterns = [
-        /cote\s*[:\-]?\s*(\d+[.,]\d+)/i,
-        /@\s*(\d+[.,]\d+)/,
-        /(\d+[.,]\d{2})\s*$/m,
-        /(\d+[.,]\d{2})/
-    ];
-    for (const pattern of oddsPatterns) {
-        const m = text.match(pattern);
-        if (m) {
-            const val = parseFloat(m[1].replace(',', '.'));
-            if (val >= 1.01 && val <= 100) {
-                odds = val;
-                break;
-            }
-        }
-    }
+    // ---- MULTI-BET DETECTION ----
+    // Strategy: find all "match" lines (team vs team) and associate nearby odds/stakes
     
-    // Detect stake/mise
-    let amount = '';
-    const stakePatterns = [
-        /mise\s*[:\-]?\s*(\d+[.,]?\d*)\s*[€e]/i,
-        /(\d+[.,]?\d*)\s*[€e]\s*(mis|pari)/i,
-        /montant\s*[:\-]?\s*(\d+[.,]?\d*)/i,
-        /(\d+[.,]\d{2})\s*€/,
-        /€\s*(\d+[.,]\d{2})/
-    ];
-    for (const pattern of stakePatterns) {
-        const m = text.match(pattern);
-        if (m) {
-            const val = parseFloat(m[1].replace(',', '.'));
-            if (val > 0 && val < 100000) {
-                amount = val;
-                break;
-            }
-        }
-    }
+    const bets = [];
     
-    // Detect potential win
-    let potentialWin = '';
-    const winPatterns = [
-        /gain\s*(potentiel|possible)?\s*[:\-]?\s*(\d+[.,]?\d*)\s*[€e]/i,
-        /potentiel\s*[:\-]?\s*(\d+[.,]?\d*)\s*[€e]/i,
-        /remporter\s*[:\-]?\s*(\d+[.,]?\d*)/i
-    ];
-    for (const pattern of winPatterns) {
-        const m = text.match(pattern);
-        if (m) {
-            const val = parseFloat((m[2] || m[1]).replace(',', '.'));
-            if (val > 0) { potentialWin = val; break; }
-        }
-    }
-    
-    // Detect match / teams - look for "vs", "-", "contre" patterns
-    let match = '';
-    let betName = '';
-    const vsPatterns = [
-        /(.{2,30})\s+(?:vs\.?|[-–—]|contre)\s+(.{2,30})/i
-    ];
-    for (const line of lines) {
-        for (const pattern of vsPatterns) {
-            const m = line.match(pattern);
+    // Find all match-like lines: "Team A - Team B", "Team A vs Team B"
+    const matchLines = [];
+    lines.forEach((line, idx) => {
+        // Team vs Team patterns
+        if (/(.{2,35})\s+(?:vs\.?|[-–—])\s+(.{2,35})/i.test(line) && !/\d+[.,]\d+\s*€/.test(line) && !/mise|gain|cote|total/i.test(line)) {
+            const m = line.match(/(.{2,35})\s+(?:vs\.?|[-–—])\s+(.{2,35})/i);
             if (m) {
-                const t1 = m[1].trim();
-                const t2 = m[2].trim();
-                // Filter out lines that are just numbers/dates
-                if (!/^\d+$/.test(t1) && !/^\d+$/.test(t2)) {
-                    match = `${t1} vs ${t2}`;
+                matchLines.push({ idx, team1: m[1].trim(), team2: m[2].trim(), line });
+            }
+        }
+    });
+    
+    // For each match, look for nearby odds, bet type, stake
+    matchLines.forEach(ml => {
+        const contextLines = lines.slice(Math.max(0, ml.idx - 3), Math.min(lines.length, ml.idx + 6));
+        const context = contextLines.join(' ');
+        
+        // Find odds nearby
+        let odds = 0;
+        const oddsMatches = context.match(/(\d+[.,]\d{2})/g);
+        if (oddsMatches) {
+            for (const om of oddsMatches) {
+                const val = parseFloat(om.replace(',', '.'));
+                if (val >= 1.01 && val <= 50) { odds = val; break; }
+            }
+        }
+        
+        // Find bet type nearby
+        let betName = `${ml.team1} vs ${ml.team2}`;
+        const typePatterns = [
+            /victoire\s+(.+)/i, /(vainqueur|gagnant)\s*[:\-]?\s*(.+)/i,
+            /(btts|les deux marquent|les 2 marquent)/i,
+            /(plus de|over)\s*\d+[.,]?\d*/i, /(moins de|under)\s*\d+[.,]?\d*/i,
+            /(handicap\s*[+-]?\s*\d+)/i, /(score exact|mi-temps|1x2|double chance)/i,
+            /(résultat|1N2)/i, /(match nul|nul)/i
+        ];
+        for (const cl of contextLines) {
+            for (const tp of typePatterns) {
+                const m = cl.match(tp);
+                if (m) {
+                    betName = `${ml.team1} vs ${ml.team2} — ${m[0].trim()}`;
                     break;
                 }
             }
         }
-        if (match) break;
-    }
+        
+        // Find stake
+        let amount = 0;
+        const stakeMatch = context.match(/(?:mise|montant|enjeu)\s*[:\-]?\s*(\d+[.,]?\d*)\s*[€e]?/i) 
+            || context.match(/(\d+[.,]\d{2})\s*€/);
+        if (stakeMatch) {
+            amount = parseFloat(stakeMatch[1].replace(',', '.'));
+        }
+        
+        const sport = detectSport(context) || detectSport(betName) || 'Football';
+        
+        bets.push({
+            selected: true,
+            name: betName,
+            match: `${ml.team1} vs ${ml.team2}`,
+            team1: ml.team1,
+            team2: ml.team2,
+            sport: sport,
+            bookmaker: bookmaker,
+            odds: odds,
+            amount: amount,
+            status: 'en-cours'
+        });
+    });
     
-    // Detect sport from text
-    const detectedSport = detectSport(text);
-    
-    // Try to build bet name from context
-    const betTypePatterns = [
-        /victoire\s+(.+)/i,
-        /(gagne|vainqueur)\s*[:\-]?\s*(.+)/i,
-        /r[ée]sultat\s*[:\-]?\s*(.+)/i,
-        /(btts|les deux marquent|plus de|moins de|over|under|handicap|score exact)/i,
-        /(1N2|double chance|mi-temps)/i
-    ];
-    for (const line of lines) {
-        for (const pattern of betTypePatterns) {
-            const m = line.match(pattern);
-            if (m && !betName) {
-                betName = line.substring(0, 60);
-                break;
+    // If no match lines found, try to find individual bets by odds pattern
+    if (bets.length === 0) {
+        // Fallback: split by odds patterns or recurring structures
+        const oddsRegex = /(\d+[.,]\d{2})/g;
+        let allOdds = [];
+        let m;
+        while ((m = oddsRegex.exec(text)) !== null) {
+            const val = parseFloat(m[1].replace(',', '.'));
+            if (val >= 1.01 && val <= 50) {
+                allOdds.push({ val, idx: m.index });
             }
         }
-        if (betName) break;
+        
+        // Try to find meaningful text before each odds
+        allOdds.forEach((o, i) => {
+            const textBefore = text.substring(i > 0 ? allOdds[i-1].idx + 5 : 0, o.idx).trim();
+            const meaningfulLines = textBefore.split('\n').map(l => l.trim()).filter(l => l.length > 3 && !/^\d+[.,]?\d*\s*€?$/.test(l));
+            
+            if (meaningfulLines.length > 0) {
+                const betLine = meaningfulLines[meaningfulLines.length - 1];
+                const sport = detectSport(betLine) || 'Football';
+                
+                bets.push({
+                    selected: true,
+                    name: betLine.substring(0, 60),
+                    match: betLine.substring(0, 60),
+                    team1: '',
+                    team2: '',
+                    sport: sport,
+                    bookmaker: bookmaker,
+                    odds: o.val,
+                    amount: 0,
+                    status: 'en-cours'
+                });
+            }
+        });
     }
     
-    // Fallback bet name: use match or first meaningful line
-    if (!betName && match) betName = match;
-    if (!betName) {
-        for (const line of lines) {
-            if (line.length > 5 && line.length < 80 && !/^\d+[.,]?\d*\s*€?$/.test(line)) {
-                betName = line;
-                break;
-            }
+    // If still nothing, create one empty bet for manual fill
+    if (bets.length === 0) {
+        bets.push({
+            selected: true,
+            name: '',
+            match: '',
+            team1: '',
+            team2: '',
+            sport: '',
+            bookmaker: bookmaker,
+            odds: 0,
+            amount: 0,
+            status: 'en-cours'
+        });
+    }
+    
+    // Find global stake if individual stakes not found
+    const globalStakeMatch = text.match(/(?:mise|montant|total|enjeu)\s*(?:total)?\s*[:\-]?\s*(\d+[.,]?\d*)\s*[€e]/i)
+        || text.match(/(\d+[.,]\d{2})\s*€/);
+    if (globalStakeMatch) {
+        const globalAmount = parseFloat(globalStakeMatch[1].replace(',', '.'));
+        if (globalAmount > 0 && globalAmount < 100000) {
+            bets.forEach(b => { if (!b.amount) b.amount = globalAmount; });
         }
     }
     
-    // Calculate potential win if we have odds and amount
-    if (!potentialWin && odds && amount) {
-        potentialWin = (odds * amount).toFixed(2);
-    }
+    ocrDetectedBets = bets;
+    renderOcrBets();
     
-    // Fill form
-    document.getElementById('ocrBetName').value = betName || '';
-    document.getElementById('ocrSport').value = detectedSport || '';
-    document.getElementById('ocrBookmaker').value = bookmaker || '';
-    document.getElementById('ocrMatch').value = match || '';
-    document.getElementById('ocrAmount').value = amount || '';
-    document.getElementById('ocrOdds').value = odds || '';
-    document.getElementById('ocrPotentialWin').value = potentialWin || '';
-    
-    // Update potential win when odds/amount change
-    document.getElementById('ocrOdds').oninput = updateOcrPotentialWin;
-    document.getElementById('ocrAmount').oninput = updateOcrPotentialWin;
-    
-    // Show result
     document.getElementById('ocrProgressArea').style.display = 'none';
     document.getElementById('ocrResultArea').style.display = 'block';
+    document.getElementById('ocrDetectedCount').textContent = `${bets.length} pari${bets.length > 1 ? 's' : ''} détecté${bets.length > 1 ? 's' : ''}`;
 }
 
-function updateOcrPotentialWin() {
-    const odds = parseFloat(document.getElementById('ocrOdds').value) || 0;
-    const amount = parseFloat(document.getElementById('ocrAmount').value) || 0;
-    document.getElementById('ocrPotentialWin').value = (odds * amount).toFixed(2);
-}
-
-function submitOcrBet() {
-    const name = document.getElementById('ocrBetName').value;
-    const sport = document.getElementById('ocrSport').value;
-    const match = document.getElementById('ocrMatch').value;
-    const amount = parseFloat(document.getElementById('ocrAmount').value);
-    const odds = parseFloat(document.getElementById('ocrOdds').value);
-    const bookmaker = document.getElementById('ocrBookmaker').value;
-    const status = document.getElementById('ocrStatus').value;
+function renderOcrBets() {
+    const container = document.getElementById('ocrBetsList');
     
-    if (!name || !amount || !odds) {
-        alert('Veuillez remplir au minimum : Nom, Mise et Cote');
+    container.innerHTML = ocrDetectedBets.map((bet, i) => `
+        <div style="padding: 16px; background: var(--bg-secondary); border: 2px solid ${bet.selected ? 'var(--primary)' : 'var(--border)'}; border-radius: 14px; margin-bottom: 12px; transition: border-color 0.2s;" id="ocrBet${i}">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                <input type="checkbox" ${bet.selected ? 'checked' : ''} onchange="ocrDetectedBets[${i}].selected = this.checked; document.getElementById('ocrBet${i}').style.borderColor = this.checked ? 'var(--primary)' : 'var(--border)';" style="width: 20px; height: 20px; cursor: pointer;">
+                <span style="font-weight: 700; font-size: 1.05em;">${getSportIcon(bet.sport)} Pari ${i + 1}</span>
+                ${bet.bookmaker ? `<span class="badge info" style="font-size: 0.75em;">${bet.bookmaker}</span>` : ''}
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label style="font-size: 0.82em;">Nom du pari</label>
+                <input type="text" value="${(bet.name || '').replace(/"/g, '&quot;')}" onchange="ocrDetectedBets[${i}].name = this.value" placeholder="Ex: PSG gagne" style="padding: 10px 12px;">
+            </div>
+            
+            <div class="form-row" style="margin-bottom: 12px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.82em;">Sport</label>
+                    <select onchange="ocrDetectedBets[${i}].sport = this.value" style="padding: 10px 12px;">
+                        <option value="" ${!bet.sport ? 'selected' : ''}>--</option>
+                        <option value="Football" ${bet.sport === 'Football' ? 'selected' : ''}>⚽ Football</option>
+                        <option value="Basketball" ${bet.sport === 'Basketball' ? 'selected' : ''}>🏀 Basketball</option>
+                        <option value="Tennis" ${bet.sport === 'Tennis' ? 'selected' : ''}>🎾 Tennis</option>
+                        <option value="Rugby" ${bet.sport === 'Rugby' ? 'selected' : ''}>🏉 Rugby</option>
+                        <option value="MMA" ${bet.sport === 'MMA' ? 'selected' : ''}>🥊 MMA</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.82em;">Bookmaker</label>
+                    <select onchange="ocrDetectedBets[${i}].bookmaker = this.value" style="padding: 10px 12px;">
+                        <option value="" ${!bet.bookmaker ? 'selected' : ''}>--</option>
+                        <option value="Betclic" ${bet.bookmaker === 'Betclic' ? 'selected' : ''}>Betclic</option>
+                        <option value="Winamax" ${bet.bookmaker === 'Winamax' ? 'selected' : ''}>Winamax</option>
+                        <option value="Unibet" ${bet.bookmaker === 'Unibet' ? 'selected' : ''}>Unibet</option>
+                        <option value="PMU" ${bet.bookmaker === 'PMU' ? 'selected' : ''}>PMU</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label style="font-size: 0.82em;">Match</label>
+                <input type="text" value="${(bet.match || '').replace(/"/g, '&quot;')}" onchange="ocrDetectedBets[${i}].match = this.value" placeholder="Équipe A vs Équipe B" style="padding: 10px 12px;">
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.82em;">Mise (€)</label>
+                    <input type="number" step="0.01" value="${bet.amount || ''}" onchange="ocrDetectedBets[${i}].amount = parseFloat(this.value) || 0" placeholder="10.00" style="padding: 10px 12px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.82em;">Cote</label>
+                    <input type="number" step="0.01" value="${bet.odds || ''}" onchange="ocrDetectedBets[${i}].odds = parseFloat(this.value) || 0" placeholder="1.85" style="padding: 10px 12px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.82em;">Statut</label>
+                    <select onchange="ocrDetectedBets[${i}].status = this.value" style="padding: 10px 12px;">
+                        <option value="en-cours" ${bet.status === 'en-cours' ? 'selected' : ''}>En cours</option>
+                        <option value="gagne" ${bet.status === 'gagne' ? 'selected' : ''}>Gagné</option>
+                        <option value="perdu" ${bet.status === 'perdu' ? 'selected' : ''}>Perdu</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function submitAllOcrBets() {
+    const selected = ocrDetectedBets.filter(b => b.selected);
+    if (selected.length === 0) {
+        alert('Aucun pari sélectionné');
+        return;
+    }
+    
+    // Validate
+    const invalid = selected.filter(b => !b.name || !b.amount || !b.odds);
+    if (invalid.length > 0) {
+        alert(`${invalid.length} pari(s) incomplet(s). Remplissez au minimum : Nom, Mise et Cote.`);
         return;
     }
     
     const br = getCurrentBankroll();
-    const bet = {
-        id: Date.now(),
-        type: 'simple',
-        name: name,
-        sport: sport || 'Football',
-        league: '',
-        match: match,
-        amount: amount,
-        odds: odds,
-        confidence: 50,
-        status: status,
-        bookmaker: bookmaker,
-        date: new Date().toISOString(),
-        notes: 'Ajouté via screenshot OCR'
-    };
+    let added = 0;
     
-    // Handle bankroll updates
-    br.currentAmount -= amount;
-    if (bookmaker && bookmaker !== '-') {
-        if (!br.bookmakers[bookmaker]) br.bookmakers[bookmaker] = 0;
-        br.bookmakers[bookmaker] -= amount;
-    }
+    selected.forEach(b => {
+        const bet = {
+            id: Date.now() + added,
+            type: 'simple',
+            name: b.name,
+            sport: b.sport || 'Football',
+            league: '',
+            match: b.match,
+            amount: b.amount,
+            odds: b.odds,
+            confidence: 50,
+            status: b.status,
+            bookmaker: b.bookmaker,
+            date: new Date().toISOString(),
+            notes: 'Ajouté via screenshot OCR'
+        };
+        
+        br.currentAmount -= b.amount;
+        if (b.bookmaker && b.bookmaker !== '-') {
+            if (!br.bookmakers[b.bookmaker]) br.bookmakers[b.bookmaker] = 0;
+            br.bookmakers[b.bookmaker] -= b.amount;
+        }
+        
+        if (b.status === 'gagne') {
+            const gain = b.amount * b.odds;
+            br.currentAmount += gain;
+            if (b.bookmaker && b.bookmaker !== '-') br.bookmakers[b.bookmaker] += gain;
+        }
+        
+        br.bets.push(bet);
+        added++;
+    });
     
-    if (status === 'gagne') {
-        const gain = amount * odds;
-        br.currentAmount += gain;
-        if (bookmaker && bookmaker !== '-') br.bookmakers[bookmaker] += gain;
-    } else if (status === 'cashout') {
-        br.currentAmount += amount;
-        if (bookmaker && bookmaker !== '-') br.bookmakers[bookmaker] += amount;
-    }
-    
-    br.bets.push(bet);
     saveData();
     closeModal('addBetModal');
     updateDashboard();
-    
-    // Reset screenshot form
     resetScreenshotForm();
 }
 
@@ -5256,6 +5276,7 @@ function resetScreenshotForm() {
     document.getElementById('ocrProgressArea').style.display = 'none';
     document.getElementById('ocrResultArea').style.display = 'none';
     document.getElementById('screenshotInput').value = '';
+    ocrDetectedBets = [];
 }
 
 // ===================================

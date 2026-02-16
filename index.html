@@ -2585,12 +2585,15 @@ function updateBankrollsPage() {
         const bookmakersHtml = Object.keys(br.bookmakers).length > 0 ? `
             <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
                 <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px; color: var(--text-secondary);">Répartition Bookmakers</div>
-                ${Object.entries(br.bookmakers).map(([bm, data]) => `
+                ${Object.entries(br.bookmakers).map(([bm, data]) => {
+                    const val = typeof data === 'object' ? (data.current || 0) : (data || 0);
+                    return `
                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.9em;">
                         <span>${bm}</span>
-                        <span style="font-weight: 600;">${data.current.toFixed(2)} €</span>
+                        <span style="font-weight: 600;">${val.toFixed(2)} €</span>
                     </div>
-                `).join('')}
+                    `;
+                }).join('')}
             </div>
         ` : '';
         
@@ -5008,37 +5011,27 @@ function parseOcrMultiBets(rawText) {
     else if (/pmu|parions\s*sport/i.test(text)) bookmaker = 'PMU';
     else if (/pokerstars/i.test(text)) bookmaker = 'Pokerstars';
     else if (/bwin/i.test(text)) bookmaker = 'Bwin';
-    // Indirect detection: Betclic uses "Réf" + hex ID + "Partager" format
-    if (!bookmaker && /Réf\s+[a-f0-9]{10,}/i.test(text) && /Partager/i.test(text)) {
+    // Betclic detection by structure: "Partager" + "Réf" pattern
+    if (!bookmaker && /partager/i.test(text) && /réf\s+[a-f0-9]/i.test(text)) {
         bookmaker = 'Betclic';
     }
-    if (!bookmaker && /simple\s*\(\s*(?:perdu|gagn)/i.test(text)) {
-        bookmaker = 'Betclic';
-    }
+    if (!bookmaker && /freebets?/i.test(text)) bookmaker = 'Winamax';
     
     // ---- SPLIT TEXT INTO BET BLOCKS by "Mise" lines ----
     const misePositions = [];
     lines.forEach((line, idx) => {
-        if (/^mise\s+\d+[.,]\d+\s*€?$/i.test(line) || /^mise\s*$/i.test(line)) {
+        if (/mise\s+\d+[.,]\d+\s*€?/i.test(line) && line.length < 30) {
             misePositions.push(idx);
         }
-        // Also match "Mise    10,70 €" where amount is on same line but with spaces
-        if (/mise/i.test(line) && /\d+[.,]\d+\s*€/.test(line) && line.length < 30) {
-            if (!misePositions.includes(idx)) misePositions.push(idx);
-        }
     });
-    
-    // Also detect "Mise" when amount is on next line
     lines.forEach((line, idx) => {
         if (/^\d+[.,]\d+\s*€$/.test(line) && idx > 0 && /^mise$/i.test(lines[idx-1])) {
             if (!misePositions.includes(idx - 1)) misePositions.push(idx - 1);
         }
     });
-    
     misePositions.sort((a, b) => a - b);
     
     let betBlocks = [];
-    
     if (misePositions.length >= 1) {
         misePositions.forEach((miseIdx, i) => {
             let startIdx;
@@ -5046,11 +5039,10 @@ function parseOcrMultiBets(rawText) {
                 startIdx = 0;
             } else {
                 startIdx = misePositions[i - 1] + 1;
-                while (startIdx < miseIdx && /^(gains?|partager|réf|\(\d|€|\d+[.,]\d+\s*€|[€$]|^\s*$)/i.test(lines[startIdx])) {
+                while (startIdx < miseIdx && /^(gains?|partager|réf|\(\d|€|\d+[.,]\d+\s*€|simple|combin|^\s*$)/i.test(lines[startIdx])) {
                     startIdx++;
                 }
             }
-            
             const endIdx = Math.min(lines.length, miseIdx + 4);
             betBlocks.push(lines.slice(startIdx, endIdx));
         });
@@ -5067,13 +5059,9 @@ function parseOcrMultiBets(rawText) {
         // ---- EXTRACT MISE ----
         let amount = 0;
         for (const line of block) {
-            const m = line.match(/mise\s+(\d+[.,]\d+)\s*€?/i) || line.match(/(\d+[.,]\d+)\s*€/);
-            if (m && /mise/i.test(line)) {
-                amount = parseFloat(m[1].replace(',', '.'));
-                break;
-            }
+            const m = line.match(/mise\s+(\d+[.,]\d+)\s*€?/i);
+            if (m) { amount = parseFloat(m[1].replace(',', '.')); break; }
         }
-        // If mise line has no number, check next line
         if (!amount) {
             for (let i = 0; i < block.length; i++) {
                 if (/^mise$/i.test(block[i]) && i + 1 < block.length) {
@@ -5086,49 +5074,66 @@ function parseOcrMultiBets(rawText) {
         // ---- EXTRACT GAINS ----
         let gains = 0;
         for (const line of block) {
-            const m = line.match(/gains?\s+(\d+[.,]\d+)\s*€?/i);
+            const m = line.match(/gains?\s+(?:a\s+)?(\d+[.,]\d+)\s*€?/i);
             if (m) { gains = parseFloat(m[1].replace(',', '.')); break; }
         }
         
         // ---- EXTRACT COTE ----
-        // Priority 1: Calculate from gains/mise (most reliable for Betclic)
         let odds = 0;
-        if (amount > 0 && gains > 0) {
-            odds = parseFloat((gains / amount).toFixed(2));
-        }
-        // Priority 2: Explicit patterns if no gains available
-        if (!odds) {
-            for (const line of block) {
-                const m = line.match(/cote\s*[:\-]?\s*(\d+[.,]\d+)/i);
-                if (m) {
-                    const val = parseFloat(m[1].replace(',', '.'));
-                    if (val >= 1.01 && val <= 50) { odds = val; break; }
-                }
+        
+        // 1. Explicit cote patterns but NOT freebet "@ X,XX €"
+        for (const line of block) {
+            if (/@.*€/i.test(line)) continue;
+            if (/mise|gains?/i.test(line)) continue;
+            const m = line.match(/cote\s*[:\-]?\s*(\d+[.,]\d+)/i);
+            if (m) {
+                const val = parseFloat(m[1].replace(',', '.'));
+                if (val >= 1.01 && val <= 50) { odds = val; break; }
             }
         }
-        // Priority 3: Isolated decimal on its own line (Betclic badge)
+        
+        // 2. Isolated small decimal on its own line (Betclic yellow badge "1,47")
         if (!odds) {
             for (const line of block) {
-                if (/^\d+[.,]\d{2}$/.test(line.trim())) {
+                if (/^\s*\d+[.,]\d{2}\s*$/.test(line) && !/€/.test(line)) {
                     const val = parseFloat(line.trim().replace(',', '.'));
                     if (val >= 1.01 && val <= 20) { odds = val; break; }
                 }
             }
         }
-        // Priority 4: "@ X,XX" pattern
+        
+        // 3. OCR often misreads "1,47" as "147" — look for 3-digit numbers that are likely cotes
         if (!odds) {
             for (const line of block) {
-                const m = line.match(/[@]\s*(\d+[.,]\d+)/);
-                if (m) {
-                    const val = parseFloat(m[1].replace(',', '.'));
-                    if (val >= 1.01 && val <= 50) { odds = val; break; }
+                // Skip noise lines
+                if (/mise|gains?|€|partager|réf|sam|dim|\d{2}\/\d{2}/i.test(line)) continue;
+                // Skip score lines (many numbers together): "32 35 35 18 120"
+                const digitGroups = line.match(/\d+/g);
+                if (digitGroups && digitGroups.length >= 4) continue;
+                
+                // Find 3-digit number alone or at end of line
+                const threeDigitMatches = line.match(/\b(\d{3})\b/g);
+                if (threeDigitMatches) {
+                    for (const num of threeDigitMatches) {
+                        const asOdds = parseFloat(num[0] + '.' + num.slice(1));
+                        if (asOdds >= 1.01 && asOdds <= 9.99) {
+                            odds = asOdds;
+                            break;
+                        }
+                    }
                 }
+                if (odds) break;
             }
+        }
+        
+        // 4. Calculate from gains/mise as last resort
+        if (!odds && amount > 0 && gains > 0) {
+            odds = parseFloat((gains / amount).toFixed(2));
         }
         
         // ---- DETECT STATUS ----
         let status = 'en-cours';
-        if (/perdu/i.test(blockText) || (gains === 0 && amount > 0 && /gains?\s+(?:a\s+)?0[.,]00/i.test(blockText))) {
+        if (/perdu/i.test(blockText) || (amount > 0 && /gains?\s+(?:a\s+)?0[.,]00/i.test(blockText))) {
             status = 'perdu';
         } else if (/gagn[ée]/i.test(blockText) || (gains > 0 && gains > amount)) {
             status = 'gagne';
@@ -5137,49 +5142,51 @@ function parseOcrMultiBets(rawText) {
         }
         
         // ---- EXTRACT BET TYPE / NAME ----
-        // Lines like "+ de 21,5", "3è QT - Nombre total de Points - 147"
         let betTypeParts = [];
-        let betDescLine = '';
         for (const line of block) {
             if (/^\+\s*de\s+\d/i.test(line) || /^\-\s*de\s+\d/i.test(line)) {
                 betTypeParts.push(line.trim());
             }
-            if (/(?:QT|quart|set|mi[\s-]?temps|période).*(?:nombre|total|points?)/i.test(line) ||
-                /(?:nombre|total).*(?:points?|buts?|corners?|cartons?)/i.test(line)) {
-                betDescLine = line.trim();
-            }
             if (/victoire|vainqueur|btts|les\s*(?:2|deux)\s*marqu|handicap|score\s*exact|double\s*chance|1n2|match\s*nul|clean[\s-]?sheet|résultat/i.test(line)) {
-                betTypeParts.push(line.trim());
+                if (!/mise|gains?|partager/i.test(line)) {
+                    betTypeParts.push(line.trim());
+                }
             }
         }
+        // Extract QT/set info
+        for (const line of block) {
+            const qtMatch = line.match(/(?:(?:me|le|la)\s+)?(\d+[eè]?\s*(?:QT|quart|set|mi[\s-]?temps|période))/i);
+            if (qtMatch) {
+                const qtInfo = qtMatch[1].trim();
+                if (!betTypeParts.some(p => /QT|quart|set/i.test(p))) {
+                    betTypeParts.push(qtInfo);
+                }
+            }
+        }
+        let betName = betTypeParts.join(' ').replace(/\s+/g, ' ').trim();
         
         // ---- EXTRACT TEAMS ----
-        // Filter out noise lines to find team names
         const isNoiseLine = (line) => {
             if (/^mise/i.test(line)) return true;
             if (/^gains?/i.test(line)) return true;
             if (/partager|réf\s|simple|combin|en\s*cours|termin|gagn|perdu/i.test(line)) return true;
-            if (/^\d+[.,]\d+\s*€/.test(line)) return true;           // "10,70 €"
-            if (/€/.test(line)) return true;                          // Any line with €
-            if (/@/.test(line)) return true;                          // Any line with @ (odds line)
-            if (/^\d+[.,]\d{2}$/.test(line)) return true;            // "1,47" (cote)
-            if (/^\d{2}\/\d{2}/.test(line)) return true;             // "14/02/2026"
-            if (/^(sam|dim|lun|mar|mer|jeu|ven)\./i.test(line)) return true; // "Sam. 14/02"
-            if (/^\d{2}:\d{2}/.test(line)) return true;              // "10:03"
-            if (/^\+\s*de\s+\d/i.test(line)) return true;            // "+ de 21,5"
-            if (/^\-\s*de\s+\d/i.test(line)) return true;            // "- de 21,5"
-            if (/^(?:QT|quart|set|nombre|total|période)/i.test(line)) return true;
+            if (/€/.test(line)) return true;
+            if (/@/.test(line)) return true;
+            if (/^\s*\d+[.,]\d{2}\s*$/.test(line)) return true;
+            if (/^\s*\d{3}\s*$/.test(line)) return true;
+            if (/\d{2}\/\d{2}/.test(line)) return true;
+            if (/^(sam|dim|lun|mar|mer|jeu|ven)/i.test(line)) return true;
+            if (/^\d{2}:\d{2}/.test(line)) return true;
+            if (/^\+\s*de\s+\d/i.test(line)) return true;
+            if (/^\-\s*de\s+\d/i.test(line)) return true;
             if (/(?:nombre|total).*(?:points?|buts?)/i.test(line)) return true;
             if (/QT\s*[-–]/i.test(line)) return true;
-            if (/^\d+\s+\d+\s+\d+/.test(line)) return true;         // Score lines: "32 35 35 18 120"
-            if (/^\d+$/.test(line)) return true;                     // Just a number
-            if (/^\d+\s+\d+$/.test(line)) return true;               // "8 17 8" type noise
-            if (line.length < 3) return true;
-            if (line.length > 50) return true;
+            if (/\d+[eè]\s*QT/i.test(line)) return true;
+            if (/^\(?\s*\d+\s*\)?\s*$/.test(line)) return true;
+            if (/^\d+\s+\d+\s+\d+/.test(line)) return true;
+            if (/\d{2,}\s+\d{2,}/.test(line) && (line.match(/\d+/g)||[]).length >= 3) return true;
+            if (line.length < 3 || line.length > 50) return true;
             if (/victoire|vainqueur|btts|handicap|score\s*exact|double\s*chance|1n2/i.test(line)) return true;
-            if (/^\(?\s*\d+\s*\)/.test(line)) return true;           // "(1)" type lines
-            if (/^x\s/i.test(line)) return true;                     // "x @" type lines
-            if (/ERIE/i.test(line)) return true;                      // OCR artifacts
             return false;
         };
         
@@ -5189,68 +5196,28 @@ function parseOcrMultiBets(rawText) {
         for (const line of block) {
             if (isNoiseLine(line)) continue;
             
-            // Check for "Team A vs Team B" on one line
-            const vsMatch = line.match(/(.{2,30})\s+(?:vs\.?|[-–—])\s+(.{2,30})/i);
-            if (vsMatch) {
-                teams = [vsMatch[1].trim(), vsMatch[2].trim()];
-                match = `${teams[0]} vs ${teams[1]}`;
-                break;
-            }
+            // Clean trailing/leading score numbers
+            let cleaned = line.replace(/\s+\d[\d\s]*$/, '').trim();
+            cleaned = cleaned.replace(/^\d[\d\s]+/, '').trim();
+            if (cleaned.length < 3) continue;
+            if (!/[a-zA-ZÀ-ÿ]{3,}/.test(cleaned)) continue;
             
-            // Otherwise it might be a team name (one per line, Betclic style)
-            // Must look like a proper name (has letters, not just numbers)
-            if (/[a-zA-ZÀ-ÿ]{3,}/.test(line) && !/^\d/.test(line)) {
-                // Remove trailing score numbers if present: "Tasmania Jackjumpers 34 222325 104"
-                const cleaned = line.replace(/\s+\d[\d\s]*$/, '').trim();
-                if (cleaned.length >= 3) {
-                    teams.push(cleaned);
-                }
-            }
+            teams.push(cleaned);
         }
         
-        // Deduplicate teams (same team may appear in score section)
-        teams = [...new Set(teams)];
+        teams = [...new Set(teams)].slice(0, 2);
         
-        if (!match && teams.length >= 2) {
+        if (teams.length >= 2) {
             match = `${teams[0]} vs ${teams[1]}`;
-        } else if (!match && teams.length === 1) {
+        } else if (teams.length === 1) {
             match = teams[0];
         }
         
-        // ---- BUILD BET NAME ----
-        // Format: "+ 21,5 pts 3e QT Tasmania" style
-        let betName = '';
-        if (betTypeParts.length > 0) {
-            betName = betTypeParts.join(' — ');
-            // Add context from description line
-            if (betDescLine) {
-                // Extract the QT/set/period info
-                const qtMatch = betDescLine.match(/(\d+[eè]?\s*(?:QT|quart|set|mi[\s-]?temps|période))/i);
-                const totalMatch = betDescLine.match(/(nombre\s*total\s*de\s*\w+)/i);
-                if (qtMatch && !betName.includes('QT')) {
-                    betName += ' ' + qtMatch[1];
-                }
-            }
-            // Add team context if only one team in bet description
-            if (teams.length >= 1) {
-                const lastTeam = teams[teams.length - 1]; // Usually the team the bet is about
-                for (const line of block) {
-                    if (line.includes(lastTeam) && /QT|quart|set|points?|total/i.test(line)) {
-                        // The bet is about this team
-                        if (!betName.includes(lastTeam)) {
-                            betName += ' ' + lastTeam;
-                        }
-                        break;
-                    }
-                }
-            }
-        }
         if (!betName) betName = match || 'Pari détecté';
         
         // ---- DETECT SPORT ----
-        // "QT" / "Points" / "pts" → Basketball
         let sport = '';
-        if (/QT|quart[\s-]?temps|points?|pts|nba|basket|rebond/i.test(blockText)) {
+        if (/QT|quart[\s-]?temps|points?|pts|nba|basket|rebond|quarter/i.test(blockText)) {
             sport = 'Basketball';
         } else if (/set|jeux?|game|ace|tie[\s-]?break|atp|wta/i.test(blockText)) {
             sport = 'Tennis';
@@ -5258,25 +5225,6 @@ function parseOcrMultiBets(rawText) {
             sport = detectSport(blockText) || detectSport(betName) || detectSport(match) || '';
         }
         
-        // ---- DETECT DATE ----
-        let betDate = new Date().toISOString().split('T')[0]; // default today
-        for (const line of block) {
-            // "14/02/2026 10:53" or "14/02/2026"
-            const fullDate = line.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-            if (fullDate) {
-                betDate = `${fullDate[3]}-${fullDate[2]}-${fullDate[1]}`;
-                break;
-            }
-            // "Sam. 14/02" format
-            const shortDate = line.match(/(?:sam|dim|lun|mar|mer|jeu|ven)\w*\.?\s*(\d{2})\/(\d{2})/i);
-            if (shortDate) {
-                const year = new Date().getFullYear();
-                betDate = `${year}-${shortDate[2]}-${shortDate[1]}`;
-                break;
-            }
-        }
-        
-        // Only add if we found meaningful content
         if (betName || match || amount > 0 || odds > 0) {
             bets.push({
                 selected: true,
@@ -5288,26 +5236,15 @@ function parseOcrMultiBets(rawText) {
                 bookmaker: bookmaker,
                 odds: odds,
                 amount: amount,
-                status: status,
-                date: betDate
+                status: status
             });
         }
     });
     
-    // If nothing found at all
     if (bets.length === 0) {
         bets.push({
-            selected: true,
-            name: '',
-            match: '',
-            team1: '',
-            team2: '',
-            sport: '',
-            bookmaker: bookmaker,
-            odds: 0,
-            amount: 0,
-            status: 'en-cours',
-            date: new Date().toISOString().split('T')[0]
+            selected: true, name: '', match: '', team1: '', team2: '',
+            sport: '', bookmaker: bookmaker, odds: 0, amount: 0, status: 'en-cours'
         });
     }
     

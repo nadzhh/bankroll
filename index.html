@@ -2037,7 +2037,7 @@
                                 <div style="font-size:0.8em;color:var(--text-secondary);">Connecté</div>
                             </div>
                         </div>
-                        <button class="btn btn-sm" onclick="_doFirestoreSync()"><i class="fas fa-sync-alt"></i> Forcer la synchronisation</button>
+                        <button class="btn btn-sm" onclick="forceSyncNow()"><i class="fas fa-sync-alt"></i> Forcer la synchronisation</button>
                         <button class="btn btn-sm btn-secondary" style="margin-left:8px;" onclick="doLogout()"><i class="fas fa-sign-out-alt"></i> Déconnexion</button>
                     </div>
                 </div>
@@ -2819,6 +2819,40 @@ function showSyncStatus(status) {
     }
 }
 
+// Force sync = pull from Firestore
+async function forceSyncNow() {
+    if (!currentUser) return;
+    showSyncStatus('syncing');
+    try {
+        const doc = await db.collection('users').doc(currentUser.uid).get();
+        if (doc.exists) {
+            const data = doc.data();
+            if (data.bankrolls && data.bankrolls.length > 0) {
+                bankrolls = data.bankrolls;
+                currentBankrollId = data.currentBankrollId || bankrolls[0].id;
+                localStorage.setItem('bankrolls', JSON.stringify(bankrolls));
+                localStorage.setItem('currentBankrollId', currentBankrollId);
+                updateDashboard();
+                showSyncStatus('ok');
+                return;
+            }
+        }
+        showSyncStatus('ok');
+    } catch(e) {
+        console.error('Force sync error:', e);
+        showSyncStatus('error');
+    }
+}
+
+// Auto-refresh when user comes back to the tab/window
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && currentUser) {
+        forceSyncNow();
+    }
+});
+window.addEventListener('focus', () => {
+    if (currentUser) forceSyncNow();
+});
 
 // ===================================
 // NAVIGATION

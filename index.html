@@ -440,6 +440,7 @@
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.3px;
+            white-space: nowrap;
         }
 
         .badge.success {
@@ -1518,7 +1519,7 @@
 </head>
 <body data-theme="light">
     <!-- LOGIN PAGE -->
-    <div class="login-page" id="loginPage">
+    <div class="login-page" id="loginPage" style="display: none;">
         <div class="login-card">
             <div class="login-logo">
                 <i class="fas fa-chart-line"></i>
@@ -1588,7 +1589,7 @@
     <!-- SIDEBAR OVERLAY -->
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMobileMenu()"></div>
 
-    <div class="app">
+    <div class="app" id="mainApp" style="display: none;">
         <!-- SIDEBAR -->
         <aside class="sidebar">
             <div class="logo">
@@ -2529,11 +2530,15 @@ function doLogout() {
 
 function onAuthReady(user) {
     const loginPage = document.getElementById('loginPage');
+    const mainApp = document.getElementById('mainApp');
     const userBar = document.getElementById('userBar');
+    const mobileHeader = document.querySelector('.mobile-header');
     
     if (user) {
         currentUser = user;
         loginPage.style.display = 'none';
+        mainApp.style.display = 'flex';
+        if (mobileHeader) mobileHeader.style.display = '';
         userBar.style.display = 'flex';
         
         const email = user.email;
@@ -2542,6 +2547,8 @@ function onAuthReady(user) {
     } else {
         currentUser = null;
         loginPage.style.display = 'flex';
+        mainApp.style.display = 'none';
+        if (mobileHeader) mobileHeader.style.display = 'none';
         userBar.style.display = 'none';
         
         // Reset forms

@@ -1285,6 +1285,202 @@
             transform: translateY(-2px);
             box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
         }
+        /* CANAL */
+        .prono-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 16px;
+            transition: all 0.2s;
+        }
+
+        .prono-card:hover {
+            border-color: var(--primary);
+        }
+
+        .prono-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .prono-sport-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4em;
+            background: var(--bg-secondary);
+        }
+
+        .prono-meta {
+            flex: 1;
+        }
+
+        .prono-match {
+            font-weight: 700;
+            font-size: 1.05em;
+        }
+
+        .prono-date {
+            font-size: 0.8em;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .prono-bet {
+            padding: 16px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            margin-bottom: 14px;
+        }
+
+        .prono-bet-label {
+            font-size: 0.8em;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .prono-bet-value {
+            font-weight: 700;
+            font-size: 1.1em;
+        }
+
+        .prono-stats {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+
+        .prono-stat {
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.82em;
+            font-weight: 600;
+            background: var(--bg-secondary);
+        }
+
+        .prono-analysis {
+            padding: 14px;
+            background: rgba(99,102,241,0.06);
+            border-left: 3px solid var(--primary);
+            border-radius: 0 10px 10px 0;
+            font-size: 0.9em;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            margin-bottom: 14px;
+        }
+
+        .prono-result {
+            display: inline-flex;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.82em;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .prono-result.win {
+            background: rgba(16,185,129,0.15);
+            color: var(--success);
+        }
+
+        .prono-result.loss {
+            background: rgba(239,68,68,0.15);
+            color: var(--danger);
+        }
+
+        .prono-result.pending {
+            background: rgba(245,158,11,0.15);
+            color: var(--warning);
+        }
+
+        .prono-comments {
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid var(--border);
+        }
+
+        .prono-comment {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .prono-comment-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--bg-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75em;
+            font-weight: 700;
+            color: var(--text-secondary);
+            flex-shrink: 0;
+        }
+
+        .prono-comment-body {
+            flex: 1;
+            background: var(--bg-secondary);
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 0.88em;
+        }
+
+        .prono-comment-name {
+            font-weight: 700;
+            font-size: 0.82em;
+            margin-bottom: 2px;
+        }
+
+        .prono-comment-time {
+            font-size: 0.75em;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .prono-comment-input {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .prono-comment-input input {
+            flex: 1;
+            padding: 10px 14px;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: inherit;
+            font-size: 0.9em;
+        }
+
+        .prono-comment-input input:focus {
+            border-color: var(--primary);
+            outline: none;
+        }
+
+        .prono-comment-input button {
+            padding: 10px 16px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
         /* LOGIN PAGE */
         .login-page {
             position: fixed;
@@ -1619,6 +1815,10 @@
                     <div class="nav-item" data-page="pronostics">
                         <i class="fas fa-bullseye"></i>
                         Pronostics
+                    </div>
+                    <div class="nav-item" data-page="canal">
+                        <i class="fas fa-bullhorn"></i>
+                        Canal
                     </div>
                 </div>
 
@@ -1969,6 +2169,96 @@
                 <div class="card" style="margin-top: 24px;">
                     <h3 class="card-title">Recommandations Personnalisées</h3>
                     <div id="pronoRecommendations"></div>
+                </div>
+            </div>
+
+            <!-- CANAL -->
+            <div class="page" id="canal">
+                <div class="page-header">
+                    <h1 class="page-title"><i class="fas fa-bullhorn" style="margin-right: 8px;"></i>Canal Pronostics</h1>
+                    <button class="btn" id="canalPostBtn" style="display: none;" onclick="openModal('canalPostModal')">
+                        <i class="fas fa-plus"></i>
+                        Poster un prono
+                    </button>
+                </div>
+
+                <div id="canalFeed" style="max-width: 700px;">
+                    <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+                        <i class="fas fa-spinner fa-spin" style="font-size: 2em; margin-bottom: 16px; display: block;"></i>
+                        Chargement...
+                    </div>
+                </div>
+            </div>
+
+            <!-- CANAL POST MODAL -->
+            <div class="modal-overlay" id="canalPostModal">
+                <div class="modal">
+                    <div class="modal-header">
+                        <h2>Poster un pronostic</h2>
+                        <button class="close-btn" onclick="closeModal('canalPostModal')">&times;</button>
+                    </div>
+                    <form id="canalPostForm" onsubmit="submitCanalPost(event)">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Sport *</label>
+                                <select id="canalSport" required>
+                                    <option value="">Sélectionner</option>
+                                    <option value="Football">⚽ Football</option>
+                                    <option value="Basketball">🏀 Basketball</option>
+                                    <option value="Tennis">🎾 Tennis</option>
+                                    <option value="Rugby">🏉 Rugby</option>
+                                    <option value="MMA">🥊 MMA</option>
+                                    <option value="Hockey">🏒 Hockey</option>
+                                    <option value="Baseball">⚾ Baseball</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Cote *</label>
+                                <input type="number" step="0.01" id="canalOdds" required placeholder="1.85">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Match *</label>
+                            <input type="text" id="canalMatch" required placeholder="PSG vs OM">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Pronostic *</label>
+                            <input type="text" id="canalBet" required placeholder="Victoire PSG, + de 2.5 buts...">
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Mise conseillée</label>
+                                <select id="canalStake">
+                                    <option value="1">⭐ 1/5 - Petit</option>
+                                    <option value="2">⭐⭐ 2/5</option>
+                                    <option value="3" selected>⭐⭐⭐ 3/5 - Moyen</option>
+                                    <option value="4">⭐⭐⭐⭐ 4/5</option>
+                                    <option value="5">⭐⭐⭐⭐⭐ 5/5 - Max</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Confiance</label>
+                                <select id="canalConfidence">
+                                    <option value="low">🔵 Faible</option>
+                                    <option value="medium" selected>🟡 Moyenne</option>
+                                    <option value="high">🟢 Haute</option>
+                                    <option value="very-high">🔥 Très haute</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Analyse (optionnel)</label>
+                            <textarea id="canalAnalysis" rows="3" placeholder="Pourquoi ce prono ? Stats, forme, contexte..." style="width:100%;padding:12px;border:2px solid var(--border);border-radius:12px;background:var(--bg);color:var(--text);font-family:inherit;font-size:0.95em;resize:vertical;box-sizing:border-box;"></textarea>
+                        </div>
+
+                        <button type="submit" class="btn" style="width: 100%;">
+                            <i class="fas fa-paper-plane"></i> Publier
+                        </button>
+                    </form>
                 </div>
             </div>
 
@@ -2878,6 +3168,7 @@ document.querySelectorAll('.nav-item').forEach(item => {
         if (page === 'optimizer') updateOptimizer();
         if (page === 'pronostics') updatePronostics();
         if (page === 'bankrolls') updateBankrollsPage();
+        if (page === 'canal') loadCanalFeed();
         if (page === 'settings' && currentUser) {
             document.getElementById('settingsEmail').textContent = currentUser.email;
             document.getElementById('settingsAvatar').textContent = currentUser.email.charAt(0).toUpperCase();
@@ -3343,7 +3634,8 @@ function updateBookmakerSelect(selectId) {
     select.innerHTML = '<option value="">Sélectionner</option>';
     
     // Add bookmakers from bankroll
-    Object.keys(br.bookmakers).forEach(bm => {
+    const brBookmakers = Object.keys(br.bookmakers);
+    brBookmakers.forEach(bm => {
         select.innerHTML += `<option value="${bm}">${bm}</option>`;
     });
     
@@ -3355,8 +3647,12 @@ function updateBookmakerSelect(selectId) {
         }
     });
     
-    // Restore value if it exists
-    if (currentValue) select.value = currentValue;
+    // Auto-select if only one bookmaker in bankroll
+    if (!currentValue && brBookmakers.length === 1) {
+        select.value = brBookmakers[0];
+    } else if (currentValue) {
+        select.value = currentValue;
+    }
 }
 
 // Check if bookmaker has enough funds
@@ -4964,6 +5260,7 @@ function updateApp() {
     else if (page === 'optimizer') updateOptimizer();
     else if (page === 'pronostics') updatePronostics();
     else if (page === 'bankrolls') updateBankrollsPage();
+    else if (page === 'canal') loadCanalFeed();
 }
 
 // ===================================
@@ -6199,6 +6496,239 @@ function changeMatchDate(delta) {
 document.getElementById('liveSportFilter').addEventListener('change', () => {
     renderMatches(todayMatchesData);
 });
+
+// ===================================
+// CANAL PRONOSTICS
+// ===================================
+
+// Admin UID - set this to YOUR Firebase UID
+const CANAL_ADMIN_UID = null; // Will be set dynamically
+
+function isAdmin() {
+    return currentUser != null; // For now, any logged-in user can post
+    // Later: return currentUser && currentUser.uid === 'YOUR_SPECIFIC_UID';
+}
+
+async function loadCanalFeed() {
+    const feed = document.getElementById('canalFeed');
+    const postBtn = document.getElementById('canalPostBtn');
+    
+    // Show post button only for admin
+    if (isAdmin()) {
+        postBtn.style.display = '';
+    }
+    
+    try {
+        const snapshot = await db.collection('pronostics')
+            .orderBy('createdAt', 'desc')
+            .limit(50)
+            .get();
+        
+        if (snapshot.empty) {
+            feed.innerHTML = `
+                <div style="text-align: center; padding: 80px 20px; color: var(--text-secondary);">
+                    <i class="fas fa-bullhorn" style="font-size: 3em; margin-bottom: 16px; display: block; opacity: 0.3;"></i>
+                    <p style="font-size: 1.1em; font-weight: 600; margin-bottom: 8px;">Aucun pronostic publié</p>
+                    <p style="font-size: 0.9em;">Les pronostics apparaîtront ici.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '';
+        for (const doc of snapshot.docs) {
+            const prono = doc.data();
+            const pronoId = doc.id;
+            
+            // Load comments
+            const commentsSnap = await db.collection('pronostics').doc(pronoId)
+                .collection('comments').orderBy('createdAt', 'asc').limit(50).get();
+            
+            const comments = commentsSnap.docs.map(c => c.data());
+            
+            html += renderPronoCard(pronoId, prono, comments);
+        }
+        
+        feed.innerHTML = html;
+        
+    } catch(e) {
+        console.error('Load canal error:', e);
+        feed.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px; color: var(--danger);">
+                <i class="fas fa-exclamation-circle" style="font-size: 2em; margin-bottom: 12px; display: block;"></i>
+                <p>Erreur de chargement. Réessayez.</p>
+            </div>
+        `;
+    }
+}
+
+function renderPronoCard(pronoId, prono, comments) {
+    const date = prono.createdAt ? new Date(prono.createdAt.seconds ? prono.createdAt.seconds * 1000 : prono.createdAt).toLocaleDateString('fr-FR', { 
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' 
+    }) : '';
+    
+    const sportIcon = getSportIcon(prono.sport);
+    
+    const stakeStars = '⭐'.repeat(parseInt(prono.stake) || 3);
+    
+    const confidenceMap = {
+        'low': { label: 'Faible', color: '#3b82f6', icon: '🔵' },
+        'medium': { label: 'Moyenne', color: '#f59e0b', icon: '🟡' },
+        'high': { label: 'Haute', color: '#10b981', icon: '🟢' },
+        'very-high': { label: 'Très haute', color: '#ef4444', icon: '🔥' }
+    };
+    const conf = confidenceMap[prono.confidence] || confidenceMap['medium'];
+    
+    let resultHtml = '';
+    if (prono.result === 'win') {
+        resultHtml = '<span class="prono-result win">✅ Gagné</span>';
+    } else if (prono.result === 'loss') {
+        resultHtml = '<span class="prono-result loss">❌ Perdu</span>';
+    } else {
+        resultHtml = '<span class="prono-result pending">⏳ En attente</span>';
+    }
+    
+    // Admin actions
+    let adminActions = '';
+    if (isAdmin()) {
+        adminActions = `
+            <div style="display:flex;gap:6px;margin-top:12px;">
+                ${prono.result !== 'win' ? `<button class="btn btn-sm" style="background:var(--success);border-color:var(--success);" onclick="updatePronoResult('${pronoId}','win')"><i class="fas fa-check"></i> Gagné</button>` : ''}
+                ${prono.result !== 'loss' ? `<button class="btn btn-sm btn-danger" onclick="updatePronoResult('${pronoId}','loss')"><i class="fas fa-times"></i> Perdu</button>` : ''}
+                <button class="btn btn-sm btn-secondary" onclick="deleteProno('${pronoId}')" style="margin-left:auto;"><i class="fas fa-trash"></i></button>
+            </div>
+        `;
+    }
+    
+    // Comments HTML
+    const commentsHtml = comments.map(c => {
+        const cDate = c.createdAt ? new Date(c.createdAt.seconds ? c.createdAt.seconds * 1000 : c.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+        const initial = (c.name || 'A').charAt(0).toUpperCase();
+        return `
+            <div class="prono-comment">
+                <div class="prono-comment-avatar">${initial}</div>
+                <div class="prono-comment-body">
+                    <div class="prono-comment-name">${c.name || 'Anonyme'}</div>
+                    <div>${c.text}</div>
+                    <div class="prono-comment-time">${cDate}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    return `
+        <div class="prono-card">
+            <div class="prono-header">
+                <div class="prono-sport-icon">${sportIcon}</div>
+                <div class="prono-meta">
+                    <div class="prono-match">${prono.match}</div>
+                    <div class="prono-date">${date}</div>
+                </div>
+                ${resultHtml}
+            </div>
+            
+            <div class="prono-bet">
+                <div class="prono-bet-label">Pronostic</div>
+                <div class="prono-bet-value">${prono.bet}</div>
+            </div>
+            
+            <div class="prono-stats">
+                <div class="prono-stat">📊 Cote : <strong>${prono.odds}</strong></div>
+                <div class="prono-stat">${stakeStars} Mise ${prono.stake}/5</div>
+                <div class="prono-stat">${conf.icon} ${conf.label}</div>
+            </div>
+            
+            ${prono.analysis ? `<div class="prono-analysis">${prono.analysis}</div>` : ''}
+            
+            ${adminActions}
+            
+            <div class="prono-comments">
+                <div style="font-size:0.85em;font-weight:700;color:var(--text-secondary);margin-bottom:10px;">
+                    <i class="fas fa-comments"></i> ${comments.length} commentaire${comments.length > 1 ? 's' : ''}
+                </div>
+                ${commentsHtml}
+                <div class="prono-comment-input">
+                    <input type="text" placeholder="Votre pseudo" id="commentName_${pronoId}" style="max-width:120px;">
+                    <input type="text" placeholder="Écrire un commentaire..." id="commentText_${pronoId}" onkeydown="if(event.key==='Enter') submitComment('${pronoId}')">
+                    <button onclick="submitComment('${pronoId}')"><i class="fas fa-paper-plane"></i></button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+async function submitCanalPost(e) {
+    e.preventDefault();
+    if (!isAdmin()) return;
+    
+    const prono = {
+        sport: document.getElementById('canalSport').value,
+        match: document.getElementById('canalMatch').value,
+        bet: document.getElementById('canalBet').value,
+        odds: parseFloat(document.getElementById('canalOdds').value),
+        stake: document.getElementById('canalStake').value,
+        confidence: document.getElementById('canalConfidence').value,
+        analysis: document.getElementById('canalAnalysis').value || '',
+        result: 'pending',
+        authorUid: currentUser.uid,
+        authorEmail: currentUser.email,
+        createdAt: new Date().toISOString()
+    };
+    
+    try {
+        await db.collection('pronostics').add(prono);
+        closeModal('canalPostModal');
+        document.getElementById('canalPostForm').reset();
+        loadCanalFeed();
+    } catch(e) {
+        console.error('Post error:', e);
+        alert('Erreur lors de la publication.');
+    }
+}
+
+async function updatePronoResult(pronoId, result) {
+    if (!isAdmin()) return;
+    try {
+        await db.collection('pronostics').doc(pronoId).update({ result: result });
+        loadCanalFeed();
+    } catch(e) {
+        console.error('Update error:', e);
+    }
+}
+
+async function deleteProno(pronoId) {
+    if (!isAdmin()) return;
+    const ok = await customConfirm('Supprimer ce pronostic ?', 'Cette action est irréversible.', '🗑️', 'Supprimer', true);
+    if (!ok) return;
+    try {
+        await db.collection('pronostics').doc(pronoId).delete();
+        loadCanalFeed();
+    } catch(e) {
+        console.error('Delete error:', e);
+    }
+}
+
+async function submitComment(pronoId) {
+    const nameInput = document.getElementById('commentName_' + pronoId);
+    const textInput = document.getElementById('commentText_' + pronoId);
+    const name = nameInput.value.trim() || 'Anonyme';
+    const text = textInput.value.trim();
+    
+    if (!text) return;
+    
+    try {
+        await db.collection('pronostics').doc(pronoId)
+            .collection('comments').add({
+                name: name,
+                text: text,
+                createdAt: new Date().toISOString()
+            });
+        textInput.value = '';
+        loadCanalFeed();
+    } catch(e) {
+        console.error('Comment error:', e);
+    }
+}
 
 // ===================================
 // INIT

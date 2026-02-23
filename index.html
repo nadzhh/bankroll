@@ -3910,13 +3910,7 @@ document.getElementById('simpleBetForm').addEventListener('submit', async (e) =>
     
     br.bets.push(bet);
     
-    // Update bookmaker balance
-    if (bet.status === 'gagne') {
-        updateBookmakerBalance(br, bookmaker, amount, true, bet.odds);
-    } else if (bet.status === 'perdu') {
-        updateBookmakerBalance(br, bookmaker, amount, false, 0);
-    }
-    
+    // Recalculate everything (bookmakers included)
     updateBankrollAmount(br);
     saveData();
     closeModal('addBetModal');
@@ -4193,7 +4187,49 @@ function calculateStats(bankroll) {
 }
 
 function updateBankrollAmount(bankroll) {
-    bankroll.currentAmount = calculateStats(bankroll).currentAmount;
+    const stats = calculateStats(bankroll);
+    bankroll.currentAmount = stats.currentAmount;
+    recalculateBookmakers(bankroll);
+}
+
+function recalculateBookmakers(bankroll) {
+    // Reset all bookmaker balances to their initial deposit
+    Object.keys(bankroll.bookmakers).forEach(bm => {
+        const data = bankroll.bookmakers[bm];
+        if (typeof data === 'object') {
+            data.current = data.initial || 0;
+        }
+    });
+    
+    // Apply operations to bookmakers (deposits/withdrawals that target a specific bookmaker are not tracked per-bm yet)
+    // For now, operations affect the global bankroll only
+    
+    // Replay all bets
+    bankroll.bets.forEach(bet => {
+        const bm = bet.bookmaker;
+        if (!bm || bm === '-' || !bankroll.bookmakers[bm]) return;
+        const data = bankroll.bookmakers[bm];
+        if (typeof data !== 'object') return;
+        
+        const odds = bet.type === 'combine' ? (bet.totalOdds || bet.odds) : bet.odds;
+        
+        if (bet.status === 'en-cours') {
+            // Stake locked
+            data.current -= bet.amount;
+        } else if (bet.status === 'gagne') {
+            // Won: gain = mise × cote - mise (net profit, stake returned)
+            data.current += (bet.amount * odds) - bet.amount;
+        } else if (bet.status === 'perdu') {
+            // Lost: stake gone
+            data.current -= bet.amount;
+        } else if (bet.status === 'cashout') {
+            // Cashout: got back partial amount
+            data.current += (bet.cashoutAmount || 0) - bet.amount;
+        } else if (bet.status === 'annule') {
+            // Cancelled: no impact (stake refunded)
+            // data.current += 0;
+        }
+    });
 }
 
 // ===================================
@@ -4250,36 +4286,9 @@ async function changeBetStatus(id, newStatus) {
         bet.cashoutAmount = cashoutModal;
     }
 
-    // Reverse old bookmaker impact
-    if (bet.bookmaker && bet.bookmaker !== '-' && br.bookmakers[bet.bookmaker]) {
-        if (bet.status === 'gagne') {
-            const odds = bet.type === 'combine' ? bet.totalOdds : bet.odds;
-            br.bookmakers[bet.bookmaker].current -= (bet.amount * odds) - bet.amount;
-        } else if (bet.status === 'perdu') {
-            br.bookmakers[bet.bookmaker].current += bet.amount;
-        } else if (bet.status === 'cashout') {
-            br.bookmakers[bet.bookmaker].current -= (bet.cashoutAmount || 0) - bet.amount;
-        } else if (bet.status === 'annule') {
-            br.bookmakers[bet.bookmaker].current -= bet.amount;
-        }
-    }
-
     bet.status = newStatus;
 
-    // Apply new bookmaker impact
-    if (bet.bookmaker && bet.bookmaker !== '-' && br.bookmakers[bet.bookmaker]) {
-        if (newStatus === 'gagne') {
-            const odds = bet.type === 'combine' ? bet.totalOdds : bet.odds;
-            br.bookmakers[bet.bookmaker].current += (bet.amount * odds) - bet.amount;
-        } else if (newStatus === 'perdu') {
-            br.bookmakers[bet.bookmaker].current -= bet.amount;
-        } else if (newStatus === 'cashout') {
-            br.bookmakers[bet.bookmaker].current += (bet.cashoutAmount || 0) - bet.amount;
-        } else if (newStatus === 'annule') {
-            br.bookmakers[bet.bookmaker].current += bet.amount;
-        }
-    }
-
+    // Recalculate everything (bookmakers included)
     updateBankrollAmount(br);
     saveData();
     updateApp();
@@ -4664,24 +4673,6 @@ async function deleteBet(id) {
     );
     if (confirmed) {
         const br = getCurrentBankroll();
-        const bet = br.bets.find(b => String(b.id) === String(id));
-        
-        if (!bet) return;
-        
-        // Reverse bookmaker balance
-        if (bet.bookmaker && bet.bookmaker !== '-') {
-            if (bet.status === 'gagne') {
-                const odds = bet.type === 'combine' ? bet.totalOdds : bet.odds;
-                if (br.bookmakers[bet.bookmaker]) {
-                    br.bookmakers[bet.bookmaker].current -= (bet.amount * odds) - bet.amount;
-                }
-            } else if (bet.status === 'perdu') {
-                if (br.bookmakers[bet.bookmaker]) {
-                    br.bookmakers[bet.bookmaker].current += bet.amount;
-                }
-            }
-        }
-        
         br.bets = br.bets.filter(b => String(b.id) !== String(id));
         updateBankrollAmount(br);
         saveData();

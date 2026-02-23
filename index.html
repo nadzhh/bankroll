@@ -2368,7 +2368,9 @@
                                 <option value="Basketball">Basketball</option>
                                 <option value="Tennis">Tennis</option>
                                 <option value="Rugby">Rugby</option>
+                                <option value="Hockey">Hockey</option>
                                 <option value="MMA">MMA</option>
+                                <option value="Baseball">Baseball</option>
                             </select>
                         </div>
                         <div class="form-group">
@@ -2396,6 +2398,23 @@
                     <div class="form-group">
                         <label>Confiance <input type="number" id="simpleConfDisplay" min="0" max="100" value="50" style="width: 52px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-secondary); color: var(--primary); font-weight: 700; font-size: 0.95em; text-align: center; display: inline; font-family: inherit;">%</label>
                         <input type="range" id="simpleConf" min="0" max="100" value="50">
+                    </div>
+
+                    <div id="gainsPreview" style="display:none;padding:14px;background:linear-gradient(135deg,rgba(16,185,129,0.08),rgba(99,102,241,0.08));border:1px solid var(--border);border-radius:12px;margin-bottom:16px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <div>
+                                <div style="font-size:0.8em;color:var(--text-secondary);font-weight:600;">Gains possibles</div>
+                                <div style="font-size:1.4em;font-weight:800;color:var(--success);" id="gainsAmount">0.00 €</div>
+                            </div>
+                            <div style="text-align:center;">
+                                <div style="font-size:0.8em;color:var(--text-secondary);font-weight:600;">Bénéfice net</div>
+                                <div style="font-size:1.1em;font-weight:700;color:var(--primary);" id="gainsProfit">+0.00 €</div>
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-size:0.8em;color:var(--text-secondary);font-weight:600;">Probabilité</div>
+                                <div style="font-size:1.1em;font-weight:700;color:var(--warning);" id="gainsProb">0%</div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="form-row">
@@ -3640,6 +3659,28 @@ document.getElementById('simpleConfDisplay').addEventListener('input', (e) => {
     let val = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
     document.getElementById('simpleConf').value = val;
 });
+
+// Gains preview
+function updateGainsPreview() {
+    const amount = parseFloat(document.getElementById('simpleAmount').value) || 0;
+    const odds = parseFloat(document.getElementById('simpleOdds').value) || 0;
+    const preview = document.getElementById('gainsPreview');
+    
+    if (amount > 0 && odds > 1) {
+        const gains = amount * odds;
+        const profit = gains - amount;
+        const impliedProb = (1 / odds * 100).toFixed(1);
+        document.getElementById('gainsAmount').textContent = gains.toFixed(2) + ' €';
+        document.getElementById('gainsProfit').textContent = '+' + profit.toFixed(2) + ' €';
+        document.getElementById('gainsProb').textContent = impliedProb + '%';
+        preview.style.display = 'block';
+    } else {
+        preview.style.display = 'none';
+    }
+}
+
+document.getElementById('simpleAmount').addEventListener('input', updateGainsPreview);
+document.getElementById('simpleOdds').addEventListener('input', updateGainsPreview);
 
 // Smart sport detection from bet name
 const SPORT_PATTERNS = {
@@ -6194,6 +6235,8 @@ function renderOcrBets() {
                         <option value="Tennis" ${bet.sport === 'Tennis' ? 'selected' : ''}>🎾 Tennis</option>
                         <option value="Rugby" ${bet.sport === 'Rugby' ? 'selected' : ''}>🏉 Rugby</option>
                         <option value="MMA" ${bet.sport === 'MMA' ? 'selected' : ''}>🥊 MMA</option>
+                        <option value="Hockey" ${bet.sport === 'Hockey' ? 'selected' : ''}>🏒 Hockey</option>
+                        <option value="Baseball" ${bet.sport === 'Baseball' ? 'selected' : ''}>⚾ Baseball</option>
                     </select>
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">

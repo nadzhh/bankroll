@@ -4449,22 +4449,76 @@ function updateDashboard() {
 
 function updateBankrollChart(br) {
     const ctx = document.getElementById('bankrollChart');
-    let running = br.initialAmount;
-    const sorted = [...br.bets]
-        .filter(b => b.status !== 'en-cours')
-        .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    const data = [br.initialAmount];
-    const labels = ['Départ'];
-
-    sorted.forEach((bet, idx) => {
-        const odds = bet.type === 'combine' ? bet.totalOdds : bet.odds;
-        if (bet.status === 'gagne') running += (bet.amount * odds) - bet.amount;
-        else if (bet.status === 'perdu') running -= bet.amount;
-        else if (bet.status === 'cashout') running += (bet.cashoutAmount || 0) - bet.amount;
-        data.push(running);
-        labels.push(`#${idx + 1}`);
+    
+    // Calculate starting capital from operations
+    const stats = calculateStats(br);
+    const startingCapital = stats.capitalBase;
+    
+    // Merge bets and operations into a single timeline
+    const events = [];
+    
+    // Add resolved bets
+    br.bets.filter(b => b.status !== 'en-cours' && b.status !== 'annule').forEach(bet => {
+        events.push({ type: 'bet', date: bet.date, bet });
     });
+    
+    // Add operations
+    (br.operations || []).forEach(op => {
+        events.push({ type: 'operation', date: op.date, op });
+    });
+    
+    // Sort by date
+    events.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    // Build running total starting from 0 (operations build up capital, bets affect it)
+    let running = 0;
+    const data = [0]; // Will be replaced after first pass
+    const labels = ['Départ'];
+    let betCount = 0;
+    
+    // First pass: determine initial state before first event
+    // Capital base comes from operations, profit from bets
+    // We replay everything chronologically
+    events.forEach((ev, idx) => {
+        if (ev.type === 'operation') {
+            if (ev.op.type === 'depot') running += ev.op.amount;
+            else running -= ev.op.amount;
+            data.push(running);
+            labels.push(ev.op.type === 'depot' ? `+${ev.op.amount}€` : `-${ev.op.amount}€`);
+        } else {
+            const bet = ev.bet;
+            const odds = bet.type === 'combine' ? bet.totalOdds : bet.odds;
+            if (bet.status === 'gagne') running += (bet.amount * odds) - bet.amount;
+            else if (bet.status === 'perdu') running -= bet.amount;
+            else if (bet.status === 'cashout') running += (bet.cashoutAmount || 0) - bet.amount;
+            betCount++;
+            data.push(running);
+            labels.push(`#${betCount}`);
+        }
+    });
+    
+    // If no operations, use initialAmount as base
+    if (!br.operations || br.operations.length === 0) {
+        // Recalculate with initialAmount
+        running = br.initialAmount;
+        data.length = 0;
+        labels.length = 0;
+        data.push(running);
+        labels.push('Départ');
+        
+        const sorted = [...br.bets]
+            .filter(b => b.status !== 'en-cours' && b.status !== 'annule')
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        sorted.forEach((bet, idx) => {
+            const odds = bet.type === 'combine' ? bet.totalOdds : bet.odds;
+            if (bet.status === 'gagne') running += (bet.amount * odds) - bet.amount;
+            else if (bet.status === 'perdu') running -= bet.amount;
+            else if (bet.status === 'cashout') running += (bet.cashoutAmount || 0) - bet.amount;
+            data.push(running);
+            labels.push(`#${idx + 1}`);
+        });
+    }
 
     if (charts.bankroll) charts.bankroll.destroy();
 

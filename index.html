@@ -2675,11 +2675,11 @@
                     <div class="form-group">
                         <label>Mise conseillée</label>
                         <select id="canalStake">
-                            <option value="1">⭐ 1/5 - Petit</option>
-                            <option value="2">⭐⭐ 2/5</option>
-                            <option value="3" selected>⭐⭐⭐ 3/5 - Moyen</option>
-                            <option value="4">⭐⭐⭐⭐ 4/5</option>
-                            <option value="5">⭐⭐⭐⭐⭐ 5/5 - Max</option>
+                            <option value="1">⭐ 1/5 - 0.25%</option>
+                            <option value="2">⭐⭐ 2/5 - 0.5%</option>
+                            <option value="3" selected>⭐⭐⭐ 3/5 - 1%</option>
+                            <option value="4">⭐⭐⭐⭐ 4/5 - 2%</option>
+                            <option value="5">⭐⭐⭐⭐⭐ 5/5 - 5%</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -6830,16 +6830,18 @@ async function loadCanalFeed() {
         let totalStake = 0, totalReturn = 0;
         const allPronos = snapshot.docs.map(d => d.data());
         
+        const stakePercent = { '1': 0.25, '2': 0.5, '3': 1, '4': 2, '5': 5 };
+        
         allPronos.forEach(p => {
             totalPronos++;
-            const stake = parseInt(p.stake) || 3; // Use stake rating as unit
+            const pct = stakePercent[String(p.stake)] || 1;
             if (p.result === 'win') {
                 wins++;
-                totalStake += stake;
-                totalReturn += stake * (p.odds || 1);
+                totalStake += pct;
+                totalReturn += pct * (p.odds || 1);
             } else if (p.result === 'loss') {
                 losses++;
-                totalStake += stake;
+                totalStake += pct;
             } else {
                 pending++;
             }
@@ -6867,13 +6869,17 @@ async function loadCanalFeed() {
                     <div style="font-size:1.6em;font-weight:800;color:${parseFloat(roi) >= 0 ? 'var(--success)' : 'var(--danger)'};">${parseFloat(roi) >= 0 ? '+' : ''}${roi}%</div>
                 </div>
                 <div style="padding:16px;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;text-align:center;">
-                    <div style="font-size:0.78em;color:var(--text-secondary);font-weight:600;">Profit (unités)</div>
-                    <div style="font-size:1.6em;font-weight:800;color:${profit >= 0 ? 'var(--success)' : 'var(--danger)'};">${profit >= 0 ? '+' : ''}${profit.toFixed(1)}</div>
+                    <div style="font-size:0.78em;color:var(--text-secondary);font-weight:600;">Profit</div>
+                    <div style="font-size:1.6em;font-weight:800;color:${profit >= 0 ? 'var(--success)' : 'var(--danger)'};">${profit >= 0 ? '+' : ''}${profit.toFixed(2)}%</div>
+                    <div style="font-size:0.72em;color:var(--text-secondary);">de la bankroll</div>
                 </div>
                 <div style="padding:16px;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;text-align:center;">
                     <div style="font-size:0.78em;color:var(--text-secondary);font-weight:600;">En attente</div>
                     <div style="font-size:1.6em;font-weight:800;color:var(--warning);">${pending}</div>
                 </div>
+            </div>
+            <div style="font-size:0.75em;color:var(--text-secondary);margin-top:8px;text-align:center;">
+                Mise : ⭐1=0.25% · ⭐2=0.5% · ⭐3=1% · ⭐4=2% · ⭐5=5% de la bankroll
             </div>
         `;
         
@@ -6912,6 +6918,8 @@ function renderPronoCard(pronoId, prono, comments) {
     const sportIcon = getSportIcon(prono.sport);
     
     const stakeStars = '⭐'.repeat(parseInt(prono.stake) || 3);
+    const stakePercentMap = { '1': '0.25', '2': '0.5', '3': '1', '4': '2', '5': '5' };
+    const stakePct = stakePercentMap[String(prono.stake)] || '1';
     
     const confidenceMap = {
         'low': { label: 'Faible', color: '#3b82f6', icon: '🔵' },
@@ -6977,7 +6985,7 @@ function renderPronoCard(pronoId, prono, comments) {
             
             <div class="prono-stats">
                 <div class="prono-stat">📊 Cote : <strong>${prono.odds}</strong></div>
-                <div class="prono-stat">${stakeStars} Mise ${prono.stake}/5</div>
+                <div class="prono-stat">${stakeStars} ${stakePct}%</div>
                 <div class="prono-stat">${conf.icon} ${conf.label}</div>
             </div>
             

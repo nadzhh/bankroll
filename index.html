@@ -2189,7 +2189,9 @@
                     </button>
                 </div>
 
-                <div id="canalFeed" style="max-width: 700px;">
+                <div id="canalBilan" style="display:none; margin-bottom: 20px;"></div>
+
+                <div id="canalFeed" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;align-items:start;">
                     <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
                         <i class="fas fa-spinner fa-spin" style="font-size: 2em; margin-bottom: 16px; display: block;"></i>
                         Chargement...
@@ -3720,7 +3722,14 @@ const SPORT_PATTERNS = {
         /interception/i, /contre/i, /block/i,
         /nuggets/i, /thunder/i, /cavaliers/i, /knicks/i, /76ers/i, /sixers/i,
         /nets/i, /heat/i, /mavs/i, /mavericks/i, /clippers/i, /suns/i,
-        /betclic\s*[eé]lite/i, /pro\s*[ab]/i, /eurocup/i, /fiba/i
+        /betclic\s*[eé]lite/i, /pro\s*[ab]/i, /eurocup/i, /fiba/i,
+        /\bprp\b/i, /\bpr\b/i, /\brp\b/i, /\bpra\b/i,
+        /passes?\s*d[eé]cisives?/i, /\bpd\b/i,
+        /\bast\b/i, /\breb\b/i, /\bstl\b/i, /\bblk\b/i,
+        /point.*rebond/i, /rebond.*passe/i, /point.*passe/i,
+        /rockets/i, /spurs/i, /hawks/i, /bulls/i, /pacers/i, /pistons/i,
+        /raptors/i, /grizzlies/i, /pelicans/i, /timberwolves/i, /wolves/i,
+        /magic/i, /kings/i, /blazers/i, /jazz/i, /hornets/i
     ],
     'Football': [
         /but(s|eur)?/i, /corner/i, /carton/i, /clean[\s-]?sheet/i,
@@ -3942,7 +3951,9 @@ document.getElementById('simpleBetForm').addEventListener('submit', async (e) =>
         date: (() => {
             const d = document.getElementById('simpleDate').value;
             const t = document.getElementById('simpleTime').value || '12:00';
-            return d ? new Date(d + 'T' + t + ':00').toISOString() : new Date().toISOString();
+            if (!d) return new Date().toISOString();
+            // Store as local datetime string to avoid timezone shifts
+            return d + 'T' + t + ':00';
         })()
     };
 
@@ -6789,6 +6800,7 @@ function isAdmin() {
 async function loadCanalFeed() {
     const feed = document.getElementById('canalFeed');
     const postBtn = document.getElementById('canalPostBtn');
+    const bilanDiv = document.getElementById('canalBilan');
     
     // Show post button only for admin
     if (isAdmin()) {
@@ -6802,8 +6814,9 @@ async function loadCanalFeed() {
             .get();
         
         if (snapshot.empty) {
+            bilanDiv.style.display = 'none';
             feed.innerHTML = `
-                <div style="text-align: center; padding: 80px 20px; color: var(--text-secondary);">
+                <div style="text-align: center; padding: 80px 20px; color: var(--text-secondary); grid-column: 1 / -1;">
                     <i class="fas fa-bullhorn" style="font-size: 3em; margin-bottom: 16px; display: block; opacity: 0.3;"></i>
                     <p style="font-size: 1.1em; font-weight: 600; margin-bottom: 8px;">Aucun pronostic publié</p>
                     <p style="font-size: 0.9em;">Les pronostics apparaîtront ici.</p>
@@ -6811,6 +6824,58 @@ async function loadCanalFeed() {
             `;
             return;
         }
+        
+        // Compute bilan
+        let totalPronos = 0, wins = 0, losses = 0, pending = 0;
+        let totalStake = 0, totalReturn = 0;
+        const allPronos = snapshot.docs.map(d => d.data());
+        
+        allPronos.forEach(p => {
+            totalPronos++;
+            const stake = parseInt(p.stake) || 3; // Use stake rating as unit
+            if (p.result === 'win') {
+                wins++;
+                totalStake += stake;
+                totalReturn += stake * (p.odds || 1);
+            } else if (p.result === 'loss') {
+                losses++;
+                totalStake += stake;
+            } else {
+                pending++;
+            }
+        });
+        
+        const resolved = wins + losses;
+        const winRate = resolved > 0 ? ((wins / resolved) * 100).toFixed(1) : '0.0';
+        const profit = totalReturn - totalStake;
+        const roi = totalStake > 0 ? ((profit / totalStake) * 100).toFixed(1) : '0.0';
+        
+        bilanDiv.style.display = 'block';
+        bilanDiv.innerHTML = `
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;">
+                <div style="padding:16px;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;text-align:center;">
+                    <div style="font-size:0.78em;color:var(--text-secondary);font-weight:600;">Total pronos</div>
+                    <div style="font-size:1.6em;font-weight:800;">${totalPronos}</div>
+                </div>
+                <div style="padding:16px;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;text-align:center;">
+                    <div style="font-size:0.78em;color:var(--text-secondary);font-weight:600;">Win Rate</div>
+                    <div style="font-size:1.6em;font-weight:800;color:${parseFloat(winRate) >= 50 ? 'var(--success)' : 'var(--danger)'};">${winRate}%</div>
+                    <div style="font-size:0.72em;color:var(--text-secondary);">${wins}V / ${losses}D</div>
+                </div>
+                <div style="padding:16px;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;text-align:center;">
+                    <div style="font-size:0.78em;color:var(--text-secondary);font-weight:600;">ROI</div>
+                    <div style="font-size:1.6em;font-weight:800;color:${parseFloat(roi) >= 0 ? 'var(--success)' : 'var(--danger)'};">${parseFloat(roi) >= 0 ? '+' : ''}${roi}%</div>
+                </div>
+                <div style="padding:16px;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;text-align:center;">
+                    <div style="font-size:0.78em;color:var(--text-secondary);font-weight:600;">Profit (unités)</div>
+                    <div style="font-size:1.6em;font-weight:800;color:${profit >= 0 ? 'var(--success)' : 'var(--danger)'};">${profit >= 0 ? '+' : ''}${profit.toFixed(1)}</div>
+                </div>
+                <div style="padding:16px;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;text-align:center;">
+                    <div style="font-size:0.78em;color:var(--text-secondary);font-weight:600;">En attente</div>
+                    <div style="font-size:1.6em;font-weight:800;color:var(--warning);">${pending}</div>
+                </div>
+            </div>
+        `;
         
         let html = '';
         for (const doc of snapshot.docs) {
@@ -6831,7 +6896,7 @@ async function loadCanalFeed() {
     } catch(e) {
         console.error('Load canal error:', e);
         feed.innerHTML = `
-            <div style="text-align: center; padding: 60px 20px; color: var(--danger);">
+            <div style="text-align: center; padding: 60px 20px; color: var(--danger); grid-column: 1 / -1;">
                 <i class="fas fa-exclamation-circle" style="font-size: 2em; margin-bottom: 12px; display: block;"></i>
                 <p>Erreur de chargement. Réessayez.</p>
             </div>

@@ -3243,6 +3243,12 @@ function closeModal(id) {
         const submitBtn = document.querySelector('#simpleBetForm button[type="submit"]');
         if (submitBtn) submitBtn.textContent = 'Ajouter';
     }
+    if (id === 'canalPostModal') {
+        if (typeof editingPronoId !== 'undefined') editingPronoId = null;
+        const modal = document.getElementById('canalPostModal');
+        modal.querySelector('.modal-header h2').textContent = 'Poster un pronostic';
+        modal.querySelector('button[type="submit"]').innerHTML = '<i class="fas fa-paper-plane"></i> Publier';
+    }
     editingBetId = null;
 }
 
@@ -6866,6 +6872,7 @@ function renderPronoCard(pronoId, prono, comments) {
             <div style="display:flex;gap:6px;margin-top:12px;">
                 ${prono.result !== 'win' ? `<button class="btn btn-sm" style="background:var(--success);border-color:var(--success);" onclick="updatePronoResult('${pronoId}','win')"><i class="fas fa-check"></i> Gagné</button>` : ''}
                 ${prono.result !== 'loss' ? `<button class="btn btn-sm btn-danger" onclick="updatePronoResult('${pronoId}','loss')"><i class="fas fa-times"></i> Perdu</button>` : ''}
+                <button class="btn btn-sm btn-secondary" onclick="editProno('${pronoId}')"><i class="fas fa-edit"></i></button>
                 <button class="btn btn-sm btn-secondary" onclick="deleteProno('${pronoId}')" style="margin-left:auto;"><i class="fas fa-trash"></i></button>
             </div>
         `;
@@ -6928,35 +6935,6 @@ function renderPronoCard(pronoId, prono, comments) {
     `;
 }
 
-async function submitCanalPost(e) {
-    e.preventDefault();
-    if (!isAdmin()) return;
-    
-    const prono = {
-        sport: document.getElementById('canalSport').value,
-        match: document.getElementById('canalMatch').value,
-        bet: document.getElementById('canalBet').value,
-        odds: parseFloat(document.getElementById('canalOdds').value),
-        stake: document.getElementById('canalStake').value,
-        confidence: document.getElementById('canalConfidence').value,
-        analysis: document.getElementById('canalAnalysis').value || '',
-        result: 'pending',
-        authorUid: currentUser.uid,
-        authorEmail: currentUser.email,
-        createdAt: new Date().toISOString()
-    };
-    
-    try {
-        await db.collection('pronostics').add(prono);
-        closeModal('canalPostModal');
-        document.getElementById('canalPostForm').reset();
-        loadCanalFeed();
-    } catch(e) {
-        console.error('Post error:', e);
-        alert('Erreur lors de la publication.');
-    }
-}
-
 async function updatePronoResult(pronoId, result) {
     if (!isAdmin()) return;
     try {
@@ -6976,6 +6954,81 @@ async function deleteProno(pronoId) {
         loadCanalFeed();
     } catch(e) {
         console.error('Delete error:', e);
+    }
+}
+
+let editingPronoId = null;
+
+async function editProno(pronoId) {
+    if (!isAdmin()) return;
+    
+    try {
+        const doc = await db.collection('pronostics').doc(pronoId).get();
+        if (!doc.exists) return;
+        const prono = doc.data();
+        
+        editingPronoId = pronoId;
+        
+        document.getElementById('canalSport').value = prono.sport || '';
+        document.getElementById('canalMatch').value = prono.match || '';
+        document.getElementById('canalBet').value = prono.bet || '';
+        document.getElementById('canalOdds').value = prono.odds || '';
+        document.getElementById('canalStake').value = prono.stake || '3';
+        document.getElementById('canalConfidence').value = prono.confidence || 'medium';
+        document.getElementById('canalAnalysis').value = prono.analysis || '';
+        
+        // Update modal title and button
+        const modal = document.getElementById('canalPostModal');
+        modal.querySelector('.modal-header h2').textContent = 'Modifier le pronostic';
+        modal.querySelector('button[type="submit"]').innerHTML = '<i class="fas fa-save"></i> Enregistrer';
+        
+        openModal('canalPostModal');
+    } catch(e) {
+        console.error('Edit prono error:', e);
+    }
+}
+
+// Submit canal post (create or edit)
+async function submitCanalPost(e) {
+    e.preventDefault();
+    if (!isAdmin()) return;
+    
+    const data = {
+        sport: document.getElementById('canalSport').value,
+        match: document.getElementById('canalMatch').value,
+        bet: document.getElementById('canalBet').value,
+        odds: parseFloat(document.getElementById('canalOdds').value),
+        stake: document.getElementById('canalStake').value,
+        confidence: document.getElementById('canalConfidence').value,
+        analysis: document.getElementById('canalAnalysis').value || ''
+    };
+    
+    try {
+        if (editingPronoId) {
+            // Update existing
+            await db.collection('pronostics').doc(editingPronoId).update(data);
+            editingPronoId = null;
+        } else {
+            // Create new
+            data.result = 'pending';
+            data.authorUid = currentUser.uid;
+            data.authorEmail = currentUser.email;
+            data.createdAt = new Date().toISOString();
+            await db.collection('pronostics').add(data);
+        }
+        
+        closeModal('canalPostModal');
+        document.getElementById('canalPostForm').reset();
+        
+        // Reset modal title
+        const modal = document.getElementById('canalPostModal');
+        modal.querySelector('.modal-header h2').textContent = 'Poster un pronostic';
+        modal.querySelector('button[type="submit"]').innerHTML = '<i class="fas fa-paper-plane"></i> Publier';
+        
+        loadCanalFeed();
+    } catch(e) {
+        console.error('Post/Edit error:', e);
+        alert('Erreur lors de la sauvegarde.');
     }
 }
 

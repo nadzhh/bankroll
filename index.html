@@ -1960,7 +1960,7 @@
                         </div>
                     </div>
 
-                    <div class="card">
+                    <div class="card" id="bookmakerChartCard">
                         <div class="card-header">
                             <h3 class="card-title">Performance par Bookmaker</h3>
                         </div>
@@ -2376,7 +2376,7 @@
                             <option value="annule">Annulé</option>
                             </select>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group" id="simpleBookmakerGroup">
                             <label>Bookmaker</label>
                             <select id="simpleBookmaker">
                                 <option value="">Sélectionner</option>
@@ -3270,8 +3270,9 @@ function updateBankrollsPage() {
     container.innerHTML = bankrolls.map(br => {
         const stats = calculateStats(br);
         
-        // Bookmakers breakdown
-        const bookmakersHtml = Object.keys(br.bookmakers).length > 0 ? `
+        // Bookmakers breakdown (only show if multiple bookmakers)
+        const bmKeys = Object.keys(br.bookmakers);
+        const bookmakersHtml = bmKeys.length > 1 ? `
             <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
                 <div style="font-size: 0.85em; font-weight: 600; margin-bottom: 8px; color: var(--text-secondary);">Répartition Bookmakers</div>
                 ${Object.entries(br.bookmakers).map(([bm, data]) => {
@@ -3801,21 +3802,24 @@ function updateBookmakerSelect(selectId, forceAutoSelect) {
     
     const brBookmakers = Object.keys(br.bookmakers);
     
+    // Hide bookmaker field if only one bookmaker
+    const group = select.closest('.form-group');
+    if (group) {
+        group.style.display = brBookmakers.length === 1 ? 'none' : '';
+    }
+    
     if (brBookmakers.length > 0) {
-        // Bankroll has bookmakers: only show those
         select.innerHTML = brBookmakers.length > 1 ? '<option value="">Sélectionner</option>' : '';
         brBookmakers.forEach(bm => {
             select.innerHTML += `<option value="${bm}">${bm}</option>`;
         });
         
-        // Auto-select if only one bookmaker
         if (brBookmakers.length === 1) {
             select.value = brBookmakers[0];
         } else if (currentValue && !forceAutoSelect) {
             select.value = currentValue;
         }
     } else {
-        // No bookmakers in bankroll: show common ones
         select.innerHTML = '<option value="">Sélectionner</option>';
         const common = ['Betclic', 'Unibet', 'Winamax', 'PMU', 'Parions Sport'];
         common.forEach(bm => {
@@ -4210,18 +4214,25 @@ function updateBankrollAmount(bankroll) {
 }
 
 function recalculateBookmakers(bankroll) {
-    // Reset all bookmaker balances to their initial deposit
-    Object.keys(bankroll.bookmakers).forEach(bm => {
+    const bmKeys = Object.keys(bankroll.bookmakers);
+    
+    // Single bookmaker: sync its balance to bankroll currentAmount directly
+    if (bmKeys.length === 1) {
+        const data = bankroll.bookmakers[bmKeys[0]];
+        if (typeof data === 'object') {
+            data.current = bankroll.currentAmount;
+        }
+        return;
+    }
+    
+    // Multiple bookmakers: replay all bets
+    bmKeys.forEach(bm => {
         const data = bankroll.bookmakers[bm];
         if (typeof data === 'object') {
             data.current = data.initial || 0;
         }
     });
     
-    // Apply operations to bookmakers (deposits/withdrawals that target a specific bookmaker are not tracked per-bm yet)
-    // For now, operations affect the global bankroll only
-    
-    // Replay all bets
     bankroll.bets.forEach(bet => {
         const bm = bet.bookmaker;
         if (!bm || bm === '-' || !bankroll.bookmakers[bm]) return;
@@ -4231,20 +4242,13 @@ function recalculateBookmakers(bankroll) {
         const odds = bet.type === 'combine' ? (bet.totalOdds || bet.odds) : bet.odds;
         
         if (bet.status === 'en-cours') {
-            // Stake locked
             data.current -= bet.amount;
         } else if (bet.status === 'gagne') {
-            // Won: gain = mise × cote - mise (net profit, stake returned)
             data.current += (bet.amount * odds) - bet.amount;
         } else if (bet.status === 'perdu') {
-            // Lost: stake gone
             data.current -= bet.amount;
         } else if (bet.status === 'cashout') {
-            // Cashout: got back partial amount
             data.current += (bet.cashoutAmount || 0) - bet.amount;
-        } else if (bet.status === 'annule') {
-            // Cancelled: no impact (stake refunded)
-            // data.current += 0;
         }
     });
 }
@@ -4809,6 +4813,11 @@ function updateAnalyzer() {
     `;
 
     updateSportChart(br);
+    // Hide bookmaker chart if single bookmaker
+    const bmChartCard = document.getElementById('bookmakerChartCard');
+    if (bmChartCard) {
+        bmChartCard.style.display = Object.keys(br.bookmakers).length <= 1 ? 'none' : '';
+    }
     updateBookmakerChart(br);
     updateDailyPnlChart(br);
     updateDailyHistoryTable(br);

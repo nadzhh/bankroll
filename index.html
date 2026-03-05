@@ -3579,20 +3579,15 @@ document.getElementById('editBankrollForm').addEventListener('submit', (e) => {
     // Handle balance correction
     const newBalance = parseFloat(document.getElementById('editBankrollBalance').value);
     if (!isNaN(newBalance)) {
+        // Calculate what currentAmount would be WITHOUT any existing adjustment
+        const oldAdj = br.balanceAdjustment || 0;
+        br.balanceAdjustment = 0; // Reset temporarily
         const stats = calculateStats(br);
-        const currentCalc = stats.currentAmount;
-        const diff = newBalance - currentCalc;
+        const calculatedAmount = stats.currentAmount;
         
-        if (Math.abs(diff) > 0.001) {
-            // Add a correction operation to align the balance
-            if (!br.operations) br.operations = [];
-            br.operations.push({
-                type: diff > 0 ? 'depot' : 'retrait',
-                amount: Math.abs(parseFloat(diff.toFixed(2))),
-                note: 'Ajustement de solde',
-                date: new Date().toISOString()
-            });
-        }
+        // New adjustment = desired balance - calculated amount
+        const diff = newBalance - calculatedAmount;
+        br.balanceAdjustment = Math.abs(diff) > 0.001 ? parseFloat(diff.toFixed(2)) : 0;
     }
     
     const singleBm = Object.keys(br.bookmakers).length <= 1;
@@ -4231,9 +4226,12 @@ function calculateStats(bankroll) {
     
     // If operations exist, use them as base. Otherwise fallback to initialAmount
     const capitalBase = operations.length > 0 ? (totalDeposits - totalWithdrawals) : bankroll.initialAmount;
+    
+    // Balance adjustment (silent correction, doesn't affect ROI/profit stats)
+    const adjustment = bankroll.balanceAdjustment || 0;
 
     return {
-        currentAmount: capitalBase + profit,
+        currentAmount: capitalBase + profit + adjustment,
         capitalBase,
         totalDeposits,
         totalWithdrawals,

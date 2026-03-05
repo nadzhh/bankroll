@@ -2318,6 +2318,7 @@
                                 <option value="Hockey">Hockey</option>
                                 <option value="MMA">MMA</option>
                                 <option value="Baseball">Baseball</option>
+                                <option value="Poker">Poker</option>
                             </select>
                         </div>
                         <div class="form-group">
@@ -2598,6 +2599,7 @@
                             <option value="MMA">🥊 MMA</option>
                             <option value="Hockey">🏒 Hockey</option>
                             <option value="Baseball">⚾ Baseball</option>
+                            <option value="Poker">🃏 Poker</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -2859,6 +2861,7 @@ const betSportIcons = {
     'Athlétisme': '🏃',
     'Esport': '🎮',
     'Formule 1': '🏎️',
+    'Poker': '🃏',
 };
 
 function getSportIcon(sport) {
@@ -5945,6 +5948,39 @@ const sportApiMap = {
     'motorsport': 'Motorsport'
 };
 
+// Allowed leagues per sport
+const ALLOWED_LEAGUES = {
+    'Soccer': [
+        // 5 grands championnats
+        'English Premier League', 'Spanish La Liga', 'German Bundesliga',
+        'Italian Serie A', 'French Ligue 1', 'French Ligue 2',
+        'Premier League', 'La Liga', 'Bundesliga', 'Serie A', 'Ligue 1', 'Ligue 2',
+        // Coupes d'Europe
+        'UEFA Champions League', 'Champions League', 'UEFA Europa League', 'Europa League',
+        'UEFA Europa Conference League', 'Europa Conference League',
+        // Coupes nationales
+        'Coupe de France', 'French Cup', 'Copa del Rey', 'Spanish Copa del Rey',
+        'FA Cup', 'English FA Cup', 'DFB Pokal', 'German DFB-Pokal',
+        'Coppa Italia', 'Italian Coppa Italia',
+        'EFL Cup', 'English League Cup', 'Carabao Cup',
+        'Spanish Super Cup', 'French Super Cup', 'Trophee des Champions',
+        'English Community Shield', 'Italian Super Cup', 'German Super Cup',
+        'UEFA Super Cup', 'FIFA Club World Cup'
+    ],
+    'Basketball': [
+        'NBA', 'NBA Playoffs', 'NBA Finals', 'NBA All-Star',
+        'National Basketball Association'
+    ]
+};
+
+function isAllowedLeague(sport, league) {
+    if (!ALLOWED_LEAGUES[sport]) return true; // No filter for other sports
+    return ALLOWED_LEAGUES[sport].some(allowed => 
+        league.toLowerCase().includes(allowed.toLowerCase()) || 
+        allowed.toLowerCase().includes(league.toLowerCase())
+    );
+}
+
 const sportToPronoMap = {
     'Soccer': 'Football',
     'Football': 'Football',
@@ -6121,6 +6157,9 @@ function renderMatches(events) {
             filtered = events.filter(e => e.strSport === sportName);
         }
     }
+    
+    // Filter by allowed leagues
+    filtered = filtered.filter(e => isAllowedLeague(e.strSport, e.strLeague || ''));
 
     if (!filtered || filtered.length === 0) {
         container.innerHTML = `

@@ -2852,120 +2852,144 @@ function parseTicketText(rawText) {
     const text = lines.join('\n');
     const bets = [];
 
-    // Bookmaker
     const bookmaker = /winamax/i.test(text) ? 'Winamax' : 'Betclic';
 
-    // ── Normalise les montants : OCR drop la virgule decimale
-    // "075" -> 0.75, "128" -> 1.28, "190" -> 1.90, "090" -> 0.90
-    // Regle : chaine de 3 chiffres collee a "EUR" ou seule sur sa ligne
-    // qu'on peut interpreter comme X,XX (valeur /100 entre 0.10 et 9.99)
+    // ── Normalise montants OCR : "075" -> 0.75, "113" -> 1.13, "165" -> 1.65
+    // OCR Betclic drop la virgule decimale sur les petits montants
     function parseMontant(s) {
         if (!s) return 0;
-        // Nettoyer : enlever "EUR", "e", espaces
-        const clean = s.replace(/[EUR€e\s]/gi, '').replace(',', '.').replace(/[^0-9.]/g, '');
+        const clean = s.replace(/[EUR\u20ace\s]/gi, '').replace(',', '.').replace(/[^0-9.]/g, '');
         if (!clean) return 0;
         const val = parseFloat(clean);
         if (isNaN(val)) return 0;
-        // Si pas de point decimal et 3 chiffres (ex: "075", "128", "190") -> diviser par 100
-        if (!clean.includes('.') && clean.length === 3 && val < 1000) {
-            return val / 100;
-        }
-        // Si pas de point decimal et 2 chiffres < 10 (ex: "08") -> diviser par 10
-        if (!clean.includes('.') && clean.length === 2 && val < 10) {
-            return val / 10;
-        }
+        // 3 chiffres sans point : "075"->0.75, "113"->1.13, "165"->1.65
+        if (!clean.includes('.') && clean.length === 3 && val < 999) return val / 100;
+        // 2 chiffres sans point < 10 : "08"->0.8
+        if (!clean.includes('.') && clean.length === 2 && val < 10) return val / 10;
         return val;
     }
 
-    // Split en blocs "Simple"
+    // ── Split en blocs "Simple"
     const blocks = text.split(/(?=^\s*simple\b)/im).filter(b => b.trim().length > 10);
     const workBlocks = blocks.length > 1 ? blocks : [text];
 
     workBlocks.forEach((block, idx) => {
         const bLines = block.split('\n').map(l => l.trim()).filter(l => l.length > 1);
 
-        // ── Mise : ligne "Mise" puis montant ligne suivante, ou "Mise 075EUR"
+        // ── Mise + Gains (Betclic a deux variantes de ticket)
+        // Ticket resulte : "Mise" / "075EUR"  +  "Gains" / "128EUR"
+        // Ticket en cours: "Mise" / "075EUR"  +  "Gains possibles" / "113EUR"
         let amount = 0;
         let gainsRaw = 0;
+        let gainsPossibles = false; // true = pari en cours
+
         for (let i = 0; i < bLines.length; i++) {
             const l = bLines[i];
-            // "Mise 075EUR" ou "Mise0,75EUR" sur meme ligne
-            const sameM = l.match(/^mise\s*([\d,\.]+)\s*[EUR€e]*/i);
-            if (sameM) { amount = parseMontant(sameM[1]); continue; }
-            // "Mise" seul -> ligne suivante
+
+            // "Mise 0,75" ou "Mise075" sur meme ligne
+            const mSame = l.match(/^mise\s*([\d,\.]+)\s*[EUR\u20ace]*/i);
+            if (mSame) { amount = parseMontant(mSame[1]); continue; }
+
+            // "Mise" seul -> cherche montant sur les 3 lignes suivantes
             if (/^mise$/i.test(l)) {
                 for (let j = i+1; j <= Math.min(i+3, bLines.length-1); j++) {
-                    const nm = bLines[j].match(/^([\d,\.]+)\s*[EUR€e]*/i);
-                    if (nm && !/^gains?/i.test(bLines[j])) { amount = parseMontant(nm[1]); break; }
+                    if (/^(gains?|compl)/i.test(bLines[j])) break;
+                    const nm = bLines[j].match(/^([\d,\.]+)\s*[EUR\u20ace]?$/i);
+                    if (nm) { amount = parseMontant(nm[1]); break; }
                 }
                 continue;
             }
-            // "Gains 128EUR" ou "Gains 0,00EUR"
-            const gainsM = l.match(/^gains?\s*([\d,\.]+)\s*[EUR€e]*/i);
-            if (gainsM) { gainsRaw = parseMontant(gainsM[1]); continue; }
-            // "Gains" seul -> ligne suivante
+
+            // "Gains possibles 1,13" ou "Gains possibles" seul (pari en cours)
+            const gpSame = l.match(/^gains?\s*possibles?\s*([\d,\.]+)/i);
+            if (gpSame) { gainsRaw = parseMontant(gpSame[1]); gainsPossibles = true; continue; }
+            if (/^gains?\s*possibles?$/i.test(l)) {
+                gainsPossibles = true;
+                for (let j = i+1; j <= Math.min(i+2, bLines.length-1); j++) {
+                    const nm = bLines[j].match(/^([\d,\.]+)\s*[EUR\u20ace]?$/i);
+                    if (nm) { gainsRaw = parseMontant(nm[1]); break; }
+                }
+                continue;
+            }
+
+            // "Gains 1,28" (pari termine)
+            const gSame = l.match(/^gains?\s+([\d,\.]+)\s*[EUR\u20ace]*/i);
+            if (gSame) { gainsRaw = parseMontant(gSame[1]); continue; }
             if (/^gains?$/i.test(l)) {
                 for (let j = i+1; j <= Math.min(i+2, bLines.length-1); j++) {
-                    const nm = bLines[j].match(/^([\d,\.]+)\s*[EUR€e]*/i);
+                    const nm = bLines[j].match(/^([\d,\.]+)\s*[EUR\u20ace]?$/i);
                     if (nm) { gainsRaw = parseMontant(nm[1]); break; }
                 }
             }
         }
 
-        // ── Status deduit du ratio gains/mise (plus fiable que l'OCR du badge)
-        // Betclic OCR lit "simple es" (Gagne), "simple en" (Perdu/En cours)
-        // On utilise les montants pour deduire
+        // ── Statut : deduit des montants
         let bStatus = 'en-cours';
-        if (amount > 0 && gainsRaw === 0) {
+        if (gainsPossibles) {
+            // "Gains possibles" = pari pas encore joue ou en cours
+            bStatus = 'en-cours';
+        } else if (amount > 0 && gainsRaw === 0) {
             bStatus = 'perdu';
         } else if (amount > 0 && gainsRaw > amount + 0.01) {
             bStatus = 'gagne';
         } else if (amount > 0 && Math.abs(gainsRaw - amount) < 0.02) {
             bStatus = 'annule';
         }
-        // Si pas de montants lisibles, fallback OCR du badge
-        if (bStatus === 'en-cours') {
+        // Fallback OCR badge si pas de montants
+        if (bStatus === 'en-cours' && amount === 0) {
             for (const l of bLines) {
                 if (/^gains?/i.test(l)) continue;
-                if (/gagn[eé]/i.test(l))           { bStatus = 'gagne'; break; }
-                if (/\bperdu\b/i.test(l))          { bStatus = 'perdu'; break; }
-                if (/annul[eé]|rembours/i.test(l)) { bStatus = 'annule'; break; }
+                if (/gagn[e\u00e9]/i.test(l))             { bStatus = 'gagne'; break; }
+                if (/\bperdu\b/i.test(l))                 { bStatus = 'perdu'; break; }
+                if (/annul[e\u00e9]|rembours/i.test(l))   { bStatus = 'annule'; break; }
             }
         }
 
-        // ── Cote calculee depuis gains/mise
-        // Cote = gains / mise (seulement si gagne)
-        // Si en-cours : Betclic affiche les gains potentiels -> aussi calculable
+        // ── Cote
+        // Priorite 1 : calcul depuis gains/mise
         let odds = 0;
         if (amount > 0 && gainsRaw > 0) {
             odds = Math.round((gainsRaw / amount) * 100) / 100;
         }
-        // Fallback : cherche un nombre X.XX isole dans le bloc (format cote)
+        // Priorite 2 : cherche un nombre X,XX isole (encadre jaune Betclic)
         if (odds < 1.01) {
             for (const l of bLines) {
                 if ((l.match(/\d+/g) || []).length > 3) continue;
-                if (/[EUR€e]|mise|gains?/i.test(l)) continue;
-                const m = l.match(/^([1-9]\d?[.,]\d{2})$/);
+                if (/[EUR\u20ace]|mise|gains?|compl|ref/i.test(l)) continue;
+                const m = l.match(/^([1-9]\d?[,\.]\d{2})$/);
                 if (m) { odds = parseFloat(m[1].replace(',', '.')); break; }
             }
         }
 
         // ── Date & Heure
         const dateM = block.match(/(\d{2})[\/.](\d{2})[\/.](\d{4})/);
-        const date = dateM ? dateM[3] + '-' + dateM[2].padStart(2,'0') + '-' + dateM[1].padStart(2,'0') : null;
+        const date = dateM
+            ? dateM[3] + '-' + dateM[2].padStart(2,'0') + '-' + dateM[1].padStart(2,'0')
+            : null;
+        // Heure du match (ignore l'heure de la ref en fin de bloc)
         const allTimes = [...block.matchAll(/\b(\d{2}:\d{2})\b/g)].map(m => m[1]);
         const time = allTimes.length > 0 ? allTimes[0] : null;
 
         // ── Sport
         const sport = detectSportFromText(block);
 
-        // ── Match (lignes avec scores)
-        const teamLines = bLines.filter(l => /^[A-Za-z][A-Za-z\s\-\.]{2,35}\s+\d{2}/.test(l));
+        // ── Match : exclure les mots structurels comme noms d'equipe
+        // Mots a ne pas prendre comme equipe
+        const NOT_TEAM = /^(mise|gains?|simple|combin|ref|cette|nuit|aujourd|complet|performance|nombre|handicap)/i;
+        const teamLines = bLines.filter(l =>
+            /^[A-Za-z][A-Za-z\s\-\.]{2,35}\s+\d{2}/.test(l) &&
+            !NOT_TEAM.test(l)
+        );
         let match = '';
         if (teamLines.length >= 2) {
             const t1 = teamLines[0].replace(/\s+\d.*$/, '').trim();
             const t2 = teamLines[1].replace(/\s+\d.*$/, '').trim();
             match = t1 + ' vs ' + t2;
+        }
+        // Betclic en cours : "Detroit Pistons  Cette nuit  New Orleans Pelicans"
+        if (!match) {
+            const cetteNuitM = block.match(/([A-Za-z][A-Za-z\s]{3,30})\s+(?:cette nuit|aujourd'hui|demain)\s+\d{2}:\d{2}\s+([A-Za-z][A-Za-z\s]{3,30})/i);
+            if (cetteNuitM) match = cetteNuitM[1].trim() + ' vs ' + cetteNuitM[2].trim();
         }
         if (!match) {
             const vsM = block.match(/([A-Za-z][\w\s]{2,25})\s+(?:vs\.?|contre)\s+([A-Za-z][\w\s]{2,25})/i);
@@ -2974,35 +2998,40 @@ function parseTicketText(rawText) {
 
         // ── Nom du pari
         function shortCriterion(s) {
-            if (/rebond/i.test(s))                         return 'reb';
-            if (/points?.*joueur|nombre.*points?/i.test(s)) return 'pts';
-            if (/passes?.*d.cisives?|assists?/i.test(s))   return 'ast';
-            if (/points?.*rebonds?.*passes?|pra/i.test(s)) return 'PRA';
-            if (/points?.*rebonds?/i.test(s))              return 'P+R';
-            if (/points?.*passes?/i.test(s))               return 'P+A';
-            if (/rebonds?.*passes?/i.test(s))              return 'R+A';
-            if (/contres?|blocks?/i.test(s))               return 'blk';
-            if (/interceptions?|steals?/i.test(s))         return 'stl';
-            if (/trois[\s-]?points?|3pts?/i.test(s))       return '3pts';
-            if (/buts?/i.test(s))                          return 'buts';
-            if (/corners?/i.test(s))                       return 'corners';
-            if (/tirs?.*cadr/i.test(s))                    return 'tirs';
-            if (/clean.?sheet/i.test(s))                   return 'CS';
-            if (/mi.?temps/i.test(s))                      return 'MT';
-            if (/sets?/i.test(s))                          return 'sets';
-            if (/jeux/i.test(s))                           return 'jeux';
+            // Performance combinee
+            if (/performance.*pts.*reb.*pas|pts\+reb\+pas|pra\b/i.test(s)) return 'PRA';
+            if (/pts.*reb|reb.*pts|points?.*rebonds?/i.test(s))            return 'P+R';
+            if (/pts.*pas|pas.*pts|points?.*passes?/i.test(s))             return 'P+A';
+            if (/reb.*pas|pas.*reb|rebonds?.*passes?/i.test(s))            return 'R+A';
+            // Stats individuelles
+            if (/rebond/i.test(s))                                         return 'reb';
+            if (/points?.*joueur|nombre.*points?/i.test(s))                return 'pts';
+            if (/passes?.*d.cisives?|assists?/i.test(s))                   return 'ast';
+            if (/contres?|blocks?/i.test(s))                               return 'blk';
+            if (/interceptions?|steals?/i.test(s))                         return 'stl';
+            if (/trois[\s-]?points?|3[\s-]?pts?/i.test(s))                return '3pts';
+            // Foot
+            if (/buts?/i.test(s))                                          return 'buts';
+            if (/corners?/i.test(s))                                       return 'corners';
+            if (/tirs?.*cadr/i.test(s))                                    return 'tirs';
+            if (/clean.?sheet/i.test(s))                                   return 'CS';
+            if (/mi.?temps/i.test(s))                                      return 'MT';
+            // Tennis
+            if (/sets?/i.test(s))                                          return 'sets';
+            if (/jeux/i.test(s))                                           return 'jeux';
             return '';
         }
 
-        const skipPat = /^(simple|combin|gagn|perdu|annul|mise|gains?|r.f\s|aujourd|demain|hier|\d{2}[:\/.])|\d{2,}\s+\d{2,}/i;
-        const criterionPat = /nombre de|plus.moins|handicap|score exact|mi.?temps|1x2|double chance|les deux|clean.?sheet|corner|carton|passes?.*d.cisives?|rebonds?|assists?|blocks?|contres?|interceptions?|trois.?points?|sets?|jeux/i;
+        const skipPat = /^(simple|combin|gagn|perdu|annul|mise|gains?|complet|r.f\s|aujourd|cette nuit|demain|hier|\d{2}[:\/.])|\d{2,}\s+\d{2,}/i;
+        const criterionPat = /performance|nombre de|plus.moins|handicap|score exact|mi.?temps|1x2|double chance|les deux|clean.?sheet|corner|carton|passes?.*d.cisives?|rebonds?|assists?|blocks?|contres?|interceptions?|trois.?points?|sets?|jeux/i;
         const playerLinePat = /[A-Z][a-z]+.*(\+\s*de|\-\s*de|plus de|moins de|\d+[.,]\d)/i;
 
         const cands = bLines.filter(l =>
             !skipPat.test(l) &&
             l.length > 4 &&
-            !/^[\d]+[.,]?[\d]*\s*[EUR€e]?$/i.test(l) &&
+            !/^[\d]+[.,]?[\d]*\s*[EUR\u20ace]?$/i.test(l) &&
             !/^\d{2}:\d{2}$/.test(l) &&
+            !NOT_TEAM.test(l) &&
             !teamLines.includes(l)
         );
 

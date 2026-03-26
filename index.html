@@ -3055,7 +3055,30 @@ function parseTicketText(rawText) {
             }
         }
 
-        // Pattern 2: lignes avec scores
+        // Pattern 2: "TeamA\nCette nuit\n00:00\nTeamB" (light mode - lignes separees)
+        if (!match) {
+            for (let i = 0; i < bLines.length - 1; i++) {
+                const l = bLines[i];
+                if (!SKIP.test(l) && /^[A-Za-z][A-Za-z\s\-\.]{4,35}$/.test(l)) {
+                    // Cherche une 2e equipe dans les 4 lignes suivantes (apres heure/nuit)
+                    for (let j = i+1; j <= Math.min(i+4, bLines.length-1); j++) {
+                        const l2 = bLines[j];
+                        if (!SKIP.test(l2) && /^[A-Za-z][A-Za-z\s\-\.]{4,35}$/.test(l2)
+                            && l2 !== l) {
+                            const a1 = teamAbbr(l);
+                            const a2 = teamAbbr(l2);
+                            if (a1 && a2 && a1 !== a2 && a1.length >= 2 && a2.length >= 2) {
+                                match = a1 + ' vs ' + a2;
+                                break;
+                            }
+                        }
+                    }
+                    if (match) break;
+                }
+            }
+        }
+
+        // Pattern 3: lignes avec scores (pari termine)
         if (!match) {
             const teamLines = bLines.filter(l =>
                 /^[A-Za-z][A-Za-z\s\-\.]{4,35}\s+\d{2}/.test(l) && !SKIP.test(l)
@@ -3096,6 +3119,8 @@ function parseTicketText(rawText) {
         const isCriterion = /performance|nombre de|plus.moins|handicap|score exact|mi.?temps|1x2|double chance|clean.?sheet|corner|carton|passes?.*d.cisives?|rebonds?|assists?|blocks?|contres?|interceptions?|trois.?points?|sets?|jeux/i;
         const isPlayerLine = /[A-Z][a-z]+.*(\+\s*de|\-\s*de|plus de|moins de|\d+[.,]\d)/;
 
+        // cands = lignes candidates pour le nom ET le critere
+        // On ne filtre PAS les lignes de critere (Performance, Nombre de...)
         const cands = bLines.filter(l =>
             !skipLine.test(l) &&
             l.length > 4 &&
@@ -3103,13 +3128,19 @@ function parseTicketText(rawText) {
             !/^\d{2}:\d{2}$/.test(l) &&
             !SKIP.test(l)
         );
+        // criterionCands inclut aussi les lignes avec mots-cles de critere
+        // meme si filtrees par SKIP (ex: "Performance" commence par maj)
+        const criterionCands = bLines.filter(l =>
+            isCriterion.test(l) && l.length > 4
+        );
 
         // Utilise la ligne joueur nettoyee (sans la cote en fin de ligne) si disponible
         const rawPlayerLine = cands.find(l => isPlayerLine.test(l));
-        const criterionLine  = cands.find(l => isCriterion.test(l) && l !== rawPlayerLine);
         const cleanPlayerLine = (playerLineClean && isPlayerLine.test(playerLineClean))
             ? playerLineClean
-            : rawPlayerLine;
+            : playerLine;
+        // criterionLine depuis criterionCands (inclut Performance, Nombre de...)
+        const criterionLine = criterionCands.find(l => l !== playerLine && l !== cleanPlayerLine);
 
         let name = '';
         if (cleanPlayerLine) {
@@ -3131,6 +3162,8 @@ function parseTicketText(rawText) {
         } else {
             name = 'Pari ' + (idx + 1);
         }
+        // Enleve lettre(s) isolee(s) parasites en debut (OCR icone -> "e", "é", etc.)
+        name = name.replace(/^[a-zA-ZéèêëàâîïôùûüçÉÈÊËÀÂÎÏÔÙÛÜÇ]{1,2}\s+/, '');
         name = name.replace(/\s+/g, ' ').trim();
 
         // ── Ligue ─────────────────────────────────────────────────────────

@@ -3017,18 +3017,14 @@ function parseTicketText(rawText) {
             }
         }
 
-        // ── Date & Heure ─────────────────────────────────────────────────
-        // Betclic: "26/03/2026" ou "26:03:2026" (OCR confond / et :)
-        const dateM = block.match(/(\d{2})[\/:\.](\d{2})[\/:\.](\d{4})/);
-        const date = dateM
-            ? dateM[3]+'-'+dateM[2].padStart(2,'0')+'-'+dateM[1].padStart(2,'0')
-            : null;
+        // ── Date = aujourd'hui (date de l'upload) ──────────────────────────
+        const today = new Date();
+        const date = today.getFullYear() + '-'
+            + String(today.getMonth()+1).padStart(2,'0') + '-'
+            + String(today.getDate()).padStart(2,'0');
+        // Heure du match sur le ticket (ex: "00:00", "03:30")
         const allTimes = [...block.matchAll(/\b(\d{2}:\d{2})\b/g)].map(m=>m[1]);
-        // Exclure les "dates lues comme heure" genre "26:03"
-        const validTimes = allTimes.filter(t => {
-            const h = parseInt(t.split(':')[0]);
-            return h >= 0 && h <= 23;
-        });
+        const validTimes = allTimes.filter(t => { const h = parseInt(t); return h >= 0 && h <= 23; });
         const time = validTimes.length > 0 ? validTimes[0] : null;
 
         // ── Sport ─────────────────────────────────────────────────────────
@@ -3038,37 +3034,44 @@ function parseTicketText(rawText) {
         const SKIP = /^(mise|gains?|simple|combin|ref|cette|complet|performance|nombre|handicap|aujourd)/i;
         let match = '';
 
-        // Pattern 1: "Detroit Pistons Cette nuit New Orleans Pelicans"
-        // ou "Detroit Pistons\nCette nuit\nNew Orleans Pelicans"
-        // On cherche sur le texte reconstitue du bloc
+        // Nettoie les mots parasites OCR dans un nom d'equipe
+        // ex: "Detroit Pistons po" -> "Detroit Pistons", "Charlotte Hornets Ce" -> "Charlotte Hornets"
+        function cleanTeamName(s) {
+            return s
+                .trim()
+                // Enleve mots de 1-3 lettres en fin (artefacts OCR: "po", "Ce", "ee", "nuit")
+                .replace(/\s+[A-Za-z]{1,3}$/, '')
+                // Enleve mots parasites connus
+                .replace(/\b(po|ce|ee|nuit|cette|aujourd|hui|demain)\b/gi, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        // Pattern 1: "Detroit Pistons Cette nuit New Orleans Pelicans" sur une ou plusieurs lignes
         const blockOneLine = bLines.join(' ');
         const cetteNuitM = blockOneLine.match(
             /([A-Za-z][A-Za-z\s\.]{4,30?}?)\s+(?:[Cc]ette nuit|[Aa]ujourd.?hui|[Dd]emain)\s+(?:\d{2}:\d{2}\s+)?([A-Za-z][A-Za-z\s\.]{4,30?}?)(?:\s+\d{2}:\d{2}|\s*$)/
         );
         if (cetteNuitM) {
-            const t1 = cetteNuitM[1].trim();
-            const t2 = cetteNuitM[2].trim();
-            const a1 = teamAbbr(t1);
-            const a2 = teamAbbr(t2);
-            if (a1 && a2 && a1.length >= 2 && a2.length >= 2 && !SKIP.test(t1)) {
-                match = a1 + ' vs ' + a2;
+            const t1 = cleanTeamName(cetteNuitM[1]);
+            const t2 = cleanTeamName(cetteNuitM[2]);
+            if (t1.length > 3 && t2.length > 3 && !SKIP.test(t1)) {
+                match = t1 + ' vs ' + t2;
             }
         }
 
-        // Pattern 2: "TeamA\nCette nuit\n00:00\nTeamB" (light mode - lignes separees)
+        // Pattern 2: "TeamA\nCette nuit\n00:00\nTeamB" (lignes separees)
         if (!match) {
             for (let i = 0; i < bLines.length - 1; i++) {
                 const l = bLines[i];
                 if (!SKIP.test(l) && /^[A-Za-z][A-Za-z\s\-\.]{4,35}$/.test(l)) {
-                    // Cherche une 2e equipe dans les 4 lignes suivantes (apres heure/nuit)
                     for (let j = i+1; j <= Math.min(i+4, bLines.length-1); j++) {
                         const l2 = bLines[j];
-                        if (!SKIP.test(l2) && /^[A-Za-z][A-Za-z\s\-\.]{4,35}$/.test(l2)
-                            && l2 !== l) {
-                            const a1 = teamAbbr(l);
-                            const a2 = teamAbbr(l2);
-                            if (a1 && a2 && a1 !== a2 && a1.length >= 2 && a2.length >= 2) {
-                                match = a1 + ' vs ' + a2;
+                        if (!SKIP.test(l2) && /^[A-Za-z][A-Za-z\s\-\.]{4,35}$/.test(l2) && l2 !== l) {
+                            const t1 = cleanTeamName(l);
+                            const t2 = cleanTeamName(l2);
+                            if (t1.length > 3 && t2.length > 3) {
+                                match = t1 + ' vs ' + t2;
                                 break;
                             }
                         }
@@ -3084,11 +3087,9 @@ function parseTicketText(rawText) {
                 /^[A-Za-z][A-Za-z\s\-\.]{4,35}\s+\d{2}/.test(l) && !SKIP.test(l)
             );
             if (teamLines.length >= 2) {
-                const t1 = teamLines[0].replace(/\s+\d.*$/,'').trim();
-                const t2 = teamLines[1].replace(/\s+\d.*$/,'').trim();
-                const a1 = teamAbbr(t1);
-                const a2 = teamAbbr(t2);
-                if (a1 && a2) match = a1 + ' vs ' + a2;
+                const t1 = cleanTeamName(teamLines[0].replace(/\s+\d.*$/,''));
+                const t2 = cleanTeamName(teamLines[1].replace(/\s+\d.*$/,''));
+                if (t1.length > 3 && t2.length > 3) match = t1 + ' vs ' + t2;
             }
         }
 

@@ -3256,16 +3256,8 @@ async function analyzeScreenshots() {
 
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lecture OCR ' + (i+1) + '/' + screenshotFiles.length + '...';
 
-            const worker = await Tesseract.createWorker('fra', 1, {
-                logger: () => {},
-                // Parametres Tesseract pour ameliorer la precision
-                langPath: 'https://tessdata.projectnaptha.com/4.0.0'
-            });
-            // Mode page = bloc de texte, pas colonne
-            await worker.setParameters({
-                tessedit_pageseg_mode: '6',   // Assume a single uniform block of text
-                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,/: +-()\u00e9\u00e8\u00ea\u00e0\u00e2\u00f4\u00fb\u00ee\u00ef\u00e7\u00c9\u00c8\u00c0\u00c7\u20ac\u00a0'
-            });
+            const worker = await Tesseract.createWorker('fra', 1, { logger: () => {} });
+            await worker.setParameters({ tessedit_pageseg_mode: '6' });
 
             const { data: { text } } = await worker.recognize(processedDataUrl);
             await worker.terminate();

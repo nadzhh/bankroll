@@ -1100,6 +1100,54 @@
             }
         }
 
+
+        /* ===== SCREENSHOT IMPORT ===== */
+        .screenshot-dropzone {
+            border: 2px dashed var(--border); border-radius: 16px;
+            padding: 40px 20px; text-align: center; cursor: pointer;
+            transition: all 0.25s; background: var(--bg-secondary); position: relative;
+        }
+        .screenshot-dropzone:hover, .screenshot-dropzone.drag-over {
+            border-color: var(--primary); background: rgba(99,102,241,0.06);
+        }
+        .screenshot-dropzone input[type="file"] {
+            position: absolute; inset: 0; opacity: 0; cursor: pointer;
+            width: 100%; height: 100%; z-index: 2; padding: 0; border: none;
+        }
+        .screenshot-previews {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 12px; margin-top: 16px;
+        }
+        .screenshot-preview-item {
+            position: relative; border-radius: 10px; overflow: hidden;
+            aspect-ratio: 9/16; background: var(--bg-secondary); border: 1px solid var(--border);
+        }
+        .screenshot-preview-item img { width: 100%; height: 100%; object-fit: cover; }
+        .screenshot-preview-remove {
+            position: absolute; top: 4px; right: 4px; width: 22px; height: 22px;
+            background: rgba(239,68,68,0.85); border: none; border-radius: 50%;
+            color: white; cursor: pointer; font-size: 0.75em;
+            display: flex; align-items: center; justify-content: center; z-index: 3;
+        }
+        .review-bet-card {
+            background: var(--bg-secondary); border: 1px solid var(--border);
+            border-radius: 14px; padding: 18px; margin-bottom: 14px;
+            position: relative; transition: border-color 0.2s;
+        }
+        .review-bet-card.excluded { opacity: 0.4; }
+        .review-bet-card .review-exclude-btn {
+            position: absolute; top: 12px; right: 12px;
+            background: none; border: 1px solid var(--border); border-radius: 8px;
+            padding: 4px 10px; cursor: pointer; font-size: 0.78em; font-weight: 600;
+            color: var(--text-secondary); transition: all 0.2s; font-family: inherit;
+        }
+        .review-bet-card .review-exclude-btn:hover { background: rgba(239,68,68,0.1); border-color: var(--danger); color: var(--danger); }
+        .review-bet-card .review-exclude-btn.excluded { background: rgba(16,185,129,0.1); border-color: var(--success); color: var(--success); }
+        .review-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+        .review-sport-badge { padding: 4px 10px; border-radius: 8px; font-size: 0.78em; font-weight: 700; background: rgba(99,102,241,0.12); color: var(--primary); }
+        .review-bm-badge { padding: 4px 10px; border-radius: 8px; font-size: 0.78em; font-weight: 700; background: var(--bg-card); color: var(--text-secondary); border: 1px solid var(--border); }
+        .btn-screenshot { background: linear-gradient(135deg, #7c3aed, #6366f1); box-shadow: 0 4px 12px rgba(124,58,237,0.25); }
+        .btn-screenshot:hover { box-shadow: 0 6px 16px rgba(124,58,237,0.35); }
         /* SCROLLBAR */
         ::-webkit-scrollbar {
             width: 8px;
@@ -1859,6 +1907,9 @@
                     <h1 class="page-title">Dashboard</h1>
                     <div class="header-actions">
                         <button class="theme-toggle" id="themeToggle">🌙</button>
+                        <button class="btn btn-screenshot" onclick="openScreenshotImportModal()">
+                            <i class="fas fa-camera"></i> Import Screenshot
+                        </button>
                         <button class="btn" onclick="openModal('addBetModal')">
                             <i class="fas fa-plus"></i>
                             Nouveau Pari
@@ -2284,6 +2335,57 @@
         </main>
     </div>
 
+
+    <!-- MODAL: SCREENSHOT IMPORT -->
+    <div class="modal" id="screenshotModal">
+        <div class="modal-content" style="max-width: 680px;">
+            <div class="modal-header">
+                <h2 class="modal-title">📸 Importer via Screenshot</h2>
+                <button class="close-modal" onclick="closeModal('screenshotModal')">×</button>
+            </div>
+            <p style="color:var(--text-secondary);font-size:0.9em;margin-bottom:20px;">
+                Glissez ou sélectionnez jusqu'à <strong>5 captures d'écran</strong> de vos tickets <strong>Winamax / Betclic</strong>.
+            </p>
+            <div class="screenshot-dropzone" id="screenshotDropzone">
+                <input type="file" id="screenshotFileInput" accept="image/*" multiple onchange="handleScreenshotFiles(this.files)">
+                <div style="pointer-events:none;">
+                    <div style="font-size:2.5em;margin-bottom:10px;">📂</div>
+                    <div style="font-weight:700;margin-bottom:6px;">Glissez vos screenshots ici</div>
+                    <div style="font-size:0.85em;color:var(--text-secondary);">ou cliquez pour parcourir — JPG, PNG, WEBP</div>
+                </div>
+            </div>
+            <div class="screenshot-previews" id="screenshotPreviews"></div>
+            <div id="screenshotAnalyzeArea" style="display:none; margin-top:20px;">
+                <button class="btn btn-screenshot" onclick="analyzeScreenshots()" id="analyzeBtn" style="width:100%;">
+                    <i class="fas fa-camera"></i> Analyser (OCR gratuit)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: REVIEW BETS -->
+    <div class="modal" id="reviewModal">
+        <div class="modal-content" style="max-width: 760px;">
+            <div class="modal-header">
+                <h2 class="modal-title">✅ Vérifier les paris détectés</h2>
+                <button class="close-modal" onclick="closeModal('reviewModal')">×</button>
+            </div>
+            <div id="reviewContent"></div>
+
+            <details style="margin-top:12px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+                <summary style="padding:10px 16px;cursor:pointer;font-size:0.82em;font-weight:600;color:var(--text-secondary);background:var(--bg-secondary);user-select:none;">
+                    🔍 Texte brut OCR (debug)
+                </summary>
+                <pre id="ocrDebugPre" style="padding:14px;font-size:0.75em;line-height:1.5;overflow-x:auto;white-space:pre-wrap;max-height:200px;overflow-y:auto;background:var(--bg);color:var(--text-secondary);margin:0;"></pre>
+            </details>
+
+            <div style="display:flex;gap:12px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+                <button class="btn btn-secondary" onclick="closeModal('reviewModal')" style="flex:1;"><i class="fas fa-times"></i> Annuler</button>
+                <button class="btn" onclick="saveReviewedBets()" style="flex:2;"><i class="fas fa-save"></i> Enregistrer les paris sélectionnés</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: ADD BET -->
     <div class="modal" id="addBetModal">
         <div class="modal-content">
@@ -2672,6 +2774,421 @@
     </div>
 
     <script>
+
+// ===================================
+// SCREENSHOT IMPORT (Claude Vision)
+// ===================================
+let screenshotFiles = [];
+let reviewedBets = [];
+
+function openScreenshotImportModal() {
+    screenshotFiles = [];
+    reviewedBets = [];
+    renderScreenshotPreviews();
+    openModal('screenshotModal');
+}
+
+(function setupDropzone() {
+    setTimeout(() => {
+        const dz = document.getElementById('screenshotDropzone');
+        if (!dz) return;
+        dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+        dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+        dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); handleScreenshotFiles(e.dataTransfer.files); });
+    }, 500);
+})();
+
+function handleScreenshotFiles(files) {
+    const MAX = 5;
+    Array.from(files).slice(0, MAX - screenshotFiles.length).forEach(file => {
+        if (!file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            screenshotFiles.push({ base64: e.target.result.split(',')[1], dataUrl: e.target.result, mediaType: file.type });
+            renderScreenshotPreviews();
+        };
+        reader.readAsDataURL(file);
+    });
+    document.getElementById('screenshotFileInput').value = '';
+}
+
+function renderScreenshotPreviews() {
+    const container = document.getElementById('screenshotPreviews');
+    const analyzeArea = document.getElementById('screenshotAnalyzeArea');
+    if (!container) return;
+    container.innerHTML = screenshotFiles.map((item, idx) => `
+        <div class="screenshot-preview-item">
+            <img src="${item.dataUrl}" alt="Screenshot ${idx + 1}">
+            <button class="screenshot-preview-remove" onclick="removeScreenshot(${idx})">×</button>
+        </div>`).join('');
+    if (analyzeArea) analyzeArea.style.display = screenshotFiles.length > 0 ? 'block' : 'none';
+}
+
+function removeScreenshot(idx) { screenshotFiles.splice(idx, 1); renderScreenshotPreviews(); }
+
+// - OCR engine (Tesseract.js CDN, gratuit) -
+function loadTesseract() {
+    return new Promise((resolve) => {
+        if (window.Tesseract) { resolve(); return; }
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js';
+        s.onload = resolve;
+        s.onerror = resolve; // continue even if CDN fails
+        document.head.appendChild(s);
+    });
+}
+
+function detectSportFromText(t) {
+    if (/\b(nba|basket|rebond|points? (du joueur|joueur)|lakers|warriors|celtics|clippers|raptors|bucks|heat|knicks|nets|suns|nuggets|timberwolves|rockets|bulls|spurs|hawks|pistons|pacers|kings|jazz|blazers|grizzlies|pelicans|hornets|magic|thunder|cavs|cavaliers)\b/i.test(t)) return 'Basketball';
+    if (/\b(atp|wta|tennis|sets?|jeux|ace|wimbledon|roland|open australie)\b/i.test(t)) return 'Tennis';
+    if (/\b(ligue 1|ligue 2|premier league|bundesliga|serie a|la liga|champions league|europa|copa|fa cup|but|corner)\b/i.test(t)) return 'Football';
+    if (/\b(top 14|pro d2|essai|melee|rugby)\b/i.test(t)) return 'Rugby';
+    if (/\b(ufc|mma|ko|soumission|octogone)\b/i.test(t)) return 'MMA';
+    return 'Football';
+}
+
+function parseTicketText(rawText) {
+    const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 1);
+    const text = lines.join('\n');
+    const bets = [];
+
+    // Bookmaker
+    const bookmaker = /winamax/i.test(text) ? 'Winamax' : 'Betclic';
+
+    // ── Normalise les montants : OCR drop la virgule decimale
+    // "075" -> 0.75, "128" -> 1.28, "190" -> 1.90, "090" -> 0.90
+    // Regle : chaine de 3 chiffres collee a "EUR" ou seule sur sa ligne
+    // qu'on peut interpreter comme X,XX (valeur /100 entre 0.10 et 9.99)
+    function parseMontant(s) {
+        if (!s) return 0;
+        // Nettoyer : enlever "EUR", "e", espaces
+        const clean = s.replace(/[EUR€e\s]/gi, '').replace(',', '.').replace(/[^0-9.]/g, '');
+        if (!clean) return 0;
+        const val = parseFloat(clean);
+        if (isNaN(val)) return 0;
+        // Si pas de point decimal et 3 chiffres (ex: "075", "128", "190") -> diviser par 100
+        if (!clean.includes('.') && clean.length === 3 && val < 1000) {
+            return val / 100;
+        }
+        // Si pas de point decimal et 2 chiffres < 10 (ex: "08") -> diviser par 10
+        if (!clean.includes('.') && clean.length === 2 && val < 10) {
+            return val / 10;
+        }
+        return val;
+    }
+
+    // Split en blocs "Simple"
+    const blocks = text.split(/(?=^\s*simple\b)/im).filter(b => b.trim().length > 10);
+    const workBlocks = blocks.length > 1 ? blocks : [text];
+
+    workBlocks.forEach((block, idx) => {
+        const bLines = block.split('\n').map(l => l.trim()).filter(l => l.length > 1);
+
+        // ── Mise : ligne "Mise" puis montant ligne suivante, ou "Mise 075EUR"
+        let amount = 0;
+        let gainsRaw = 0;
+        for (let i = 0; i < bLines.length; i++) {
+            const l = bLines[i];
+            // "Mise 075EUR" ou "Mise0,75EUR" sur meme ligne
+            const sameM = l.match(/^mise\s*([\d,\.]+)\s*[EUR€e]*/i);
+            if (sameM) { amount = parseMontant(sameM[1]); continue; }
+            // "Mise" seul -> ligne suivante
+            if (/^mise$/i.test(l)) {
+                for (let j = i+1; j <= Math.min(i+3, bLines.length-1); j++) {
+                    const nm = bLines[j].match(/^([\d,\.]+)\s*[EUR€e]*/i);
+                    if (nm && !/^gains?/i.test(bLines[j])) { amount = parseMontant(nm[1]); break; }
+                }
+                continue;
+            }
+            // "Gains 128EUR" ou "Gains 0,00EUR"
+            const gainsM = l.match(/^gains?\s*([\d,\.]+)\s*[EUR€e]*/i);
+            if (gainsM) { gainsRaw = parseMontant(gainsM[1]); continue; }
+            // "Gains" seul -> ligne suivante
+            if (/^gains?$/i.test(l)) {
+                for (let j = i+1; j <= Math.min(i+2, bLines.length-1); j++) {
+                    const nm = bLines[j].match(/^([\d,\.]+)\s*[EUR€e]*/i);
+                    if (nm) { gainsRaw = parseMontant(nm[1]); break; }
+                }
+            }
+        }
+
+        // ── Status deduit du ratio gains/mise (plus fiable que l'OCR du badge)
+        // Betclic OCR lit "simple es" (Gagne), "simple en" (Perdu/En cours)
+        // On utilise les montants pour deduire
+        let bStatus = 'en-cours';
+        if (amount > 0 && gainsRaw === 0) {
+            bStatus = 'perdu';
+        } else if (amount > 0 && gainsRaw > amount + 0.01) {
+            bStatus = 'gagne';
+        } else if (amount > 0 && Math.abs(gainsRaw - amount) < 0.02) {
+            bStatus = 'annule';
+        }
+        // Si pas de montants lisibles, fallback OCR du badge
+        if (bStatus === 'en-cours') {
+            for (const l of bLines) {
+                if (/^gains?/i.test(l)) continue;
+                if (/gagn[eé]/i.test(l))           { bStatus = 'gagne'; break; }
+                if (/\bperdu\b/i.test(l))          { bStatus = 'perdu'; break; }
+                if (/annul[eé]|rembours/i.test(l)) { bStatus = 'annule'; break; }
+            }
+        }
+
+        // ── Cote calculee depuis gains/mise
+        // Cote = gains / mise (seulement si gagne)
+        // Si en-cours : Betclic affiche les gains potentiels -> aussi calculable
+        let odds = 0;
+        if (amount > 0 && gainsRaw > 0) {
+            odds = Math.round((gainsRaw / amount) * 100) / 100;
+        }
+        // Fallback : cherche un nombre X.XX isole dans le bloc (format cote)
+        if (odds < 1.01) {
+            for (const l of bLines) {
+                if ((l.match(/\d+/g) || []).length > 3) continue;
+                if (/[EUR€e]|mise|gains?/i.test(l)) continue;
+                const m = l.match(/^([1-9]\d?[.,]\d{2})$/);
+                if (m) { odds = parseFloat(m[1].replace(',', '.')); break; }
+            }
+        }
+
+        // ── Date & Heure
+        const dateM = block.match(/(\d{2})[\/.](\d{2})[\/.](\d{4})/);
+        const date = dateM ? dateM[3] + '-' + dateM[2].padStart(2,'0') + '-' + dateM[1].padStart(2,'0') : null;
+        const allTimes = [...block.matchAll(/\b(\d{2}:\d{2})\b/g)].map(m => m[1]);
+        const time = allTimes.length > 0 ? allTimes[0] : null;
+
+        // ── Sport
+        const sport = detectSportFromText(block);
+
+        // ── Match (lignes avec scores)
+        const teamLines = bLines.filter(l => /^[A-Za-z][A-Za-z\s\-\.]{2,35}\s+\d{2}/.test(l));
+        let match = '';
+        if (teamLines.length >= 2) {
+            const t1 = teamLines[0].replace(/\s+\d.*$/, '').trim();
+            const t2 = teamLines[1].replace(/\s+\d.*$/, '').trim();
+            match = t1 + ' vs ' + t2;
+        }
+        if (!match) {
+            const vsM = block.match(/([A-Za-z][\w\s]{2,25})\s+(?:vs\.?|contre)\s+([A-Za-z][\w\s]{2,25})/i);
+            if (vsM) match = vsM[1].trim() + ' vs ' + vsM[2].trim();
+        }
+
+        // ── Nom du pari
+        function shortCriterion(s) {
+            if (/rebond/i.test(s))                         return 'reb';
+            if (/points?.*joueur|nombre.*points?/i.test(s)) return 'pts';
+            if (/passes?.*d.cisives?|assists?/i.test(s))   return 'ast';
+            if (/points?.*rebonds?.*passes?|pra/i.test(s)) return 'PRA';
+            if (/points?.*rebonds?/i.test(s))              return 'P+R';
+            if (/points?.*passes?/i.test(s))               return 'P+A';
+            if (/rebonds?.*passes?/i.test(s))              return 'R+A';
+            if (/contres?|blocks?/i.test(s))               return 'blk';
+            if (/interceptions?|steals?/i.test(s))         return 'stl';
+            if (/trois[\s-]?points?|3pts?/i.test(s))       return '3pts';
+            if (/buts?/i.test(s))                          return 'buts';
+            if (/corners?/i.test(s))                       return 'corners';
+            if (/tirs?.*cadr/i.test(s))                    return 'tirs';
+            if (/clean.?sheet/i.test(s))                   return 'CS';
+            if (/mi.?temps/i.test(s))                      return 'MT';
+            if (/sets?/i.test(s))                          return 'sets';
+            if (/jeux/i.test(s))                           return 'jeux';
+            return '';
+        }
+
+        const skipPat = /^(simple|combin|gagn|perdu|annul|mise|gains?|r.f\s|aujourd|demain|hier|\d{2}[:\/.])|\d{2,}\s+\d{2,}/i;
+        const criterionPat = /nombre de|plus.moins|handicap|score exact|mi.?temps|1x2|double chance|les deux|clean.?sheet|corner|carton|passes?.*d.cisives?|rebonds?|assists?|blocks?|contres?|interceptions?|trois.?points?|sets?|jeux/i;
+        const playerLinePat = /[A-Z][a-z]+.*(\+\s*de|\-\s*de|plus de|moins de|\d+[.,]\d)/i;
+
+        const cands = bLines.filter(l =>
+            !skipPat.test(l) &&
+            l.length > 4 &&
+            !/^[\d]+[.,]?[\d]*\s*[EUR€e]?$/i.test(l) &&
+            !/^\d{2}:\d{2}$/.test(l) &&
+            !teamLines.includes(l)
+        );
+
+        const playerLine = cands.find(l => playerLinePat.test(l));
+        const criterionLine = cands.find(l => criterionPat.test(l) && l !== playerLine);
+
+        let name = '';
+        if (playerLine) {
+            let pn = playerLine
+                .replace(/\+\s*de\s*/gi, '+')
+                .replace(/-\s*de\s*/gi, '-')
+                .replace(/plus de\s*/gi, '+')
+                .replace(/moins de\s*/gi, '-')
+                .replace(',', '.')
+                .replace(/^[@\s]+/, '')
+                .trim();
+            if (criterionLine) {
+                const short = shortCriterion(criterionLine);
+                if (short) pn = pn + ' ' + short;
+            }
+            name = pn;
+        } else if (cands[0]) {
+            name = cands[0].replace(/^[@\s]+/, '').trim();
+        } else {
+            name = 'Pari ' + (idx + 1);
+        }
+        name = name.replace(/\s+/g, ' ').trim();
+
+        // ── Ligue
+        const leagueMap = [
+            ['NBA', /\bNBA\b/i], ['Ligue 1', /ligue 1/i], ['Ligue 2', /ligue 2/i],
+            ['Premier League', /premier league/i], ['La Liga', /la liga/i],
+            ['Bundesliga', /bundesliga/i], ['Serie A', /serie a/i],
+            ['Champions League', /champions league/i], ['Europa League', /europa league/i],
+            ['ATP', /\bATP\b/i], ['WTA', /\bWTA\b/i], ['Top 14', /top 14/i],
+        ];
+        let league = '';
+        for (const [lg, pat] of leagueMap) { if (pat.test(block)) { league = lg; break; } }
+        if (!league && sport === 'Basketball') league = 'NBA';
+
+        bets.push({ bookmaker, sport, match, name, league, amount, odds, date, time, status: bStatus, confidence: 50 });
+    });
+
+    return bets;
+}
+
+async function analyzeScreenshots() {
+    if (screenshotFiles.length === 0) return;
+    const btn = document.getElementById('analyzeBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Chargement OCR...';
+
+    try {
+        await loadTesseract();
+        if (!window.Tesseract) throw new Error('Tesseract.js non disponible');
+
+        const allBets = [];
+        for (let i = 0; i < screenshotFiles.length; i++) {
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Lecture image ${i+1}/${screenshotFiles.length}...`;
+            const worker = await Tesseract.createWorker('fra', 1, { logger: () => {} });
+            const { data: { text } } = await worker.recognize(screenshotFiles[i].dataUrl);
+            await worker.terminate();
+            // Store raw OCR for debug
+            if (!window._ocrDebug) window._ocrDebug = [];
+            window._ocrDebug.push({ img: i+1, text });
+            const bets = parseTicketText(text);
+            allBets.push(...bets);
+        }
+
+        if (allBets.length === 0) throw new Error('Aucun pari détecté');
+
+        reviewedBets = allBets.map((b, i) => ({ ...b, _id: i, _excluded: false }));
+        closeModal('screenshotModal');
+        renderReviewCards();
+        openModal('reviewModal');
+        // Show raw OCR in debug section
+        setTimeout(() => {
+            const pre = document.getElementById('ocrDebugPre');
+            if (pre && window._ocrDebug) {
+                pre.textContent = window._ocrDebug.map(d => '=== Image ' + d.img + ' ===\n' + d.text).join('\n\n');
+            }
+        }, 100);
+
+    } catch (err) {
+        console.error('OCR error:', err);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-camera"></i> Analyser les screenshots';
+        await customConfirm('Analyse échouée', 'Impossible de lire les screenshots. Assurez-vous d\'être connecté à internet (Tesseract.js CDN).', '❌', 'OK', false);
+    }
+}
+
+function renderReviewCards() {
+    const container = document.getElementById('reviewContent');
+    if (!container) return;
+    const br = getCurrentBankroll();
+    const bmKeys = Object.keys(br.bookmakers);
+    if (reviewedBets.length === 0) { container.innerHTML = '<div class="empty-state"><p class="empty-text">Aucun pari détecté</p></div>'; return; }
+
+    container.innerHTML = `
+        <div style="font-size:0.9em;color:var(--text-secondary);margin-bottom:16px;">
+            <strong>${reviewedBets.length}</strong> pari${reviewedBets.length > 1 ? 's' : ''} détecté${reviewedBets.length > 1 ? 's' : ''}. Vérifiez et corrigez si besoin.
+        </div>
+        ${reviewedBets.map((bet, idx) => `
+            <div class="review-bet-card ${bet._excluded ? 'excluded' : ''}" id="reviewCard_${idx}">
+                <button class="review-exclude-btn ${bet._excluded ? 'excluded' : ''}" onclick="toggleBetExclusion(${idx})">
+                    ${bet._excluded ? '↩ Réinclure' : '✕ Exclure'}
+                </button>
+                <div class="review-card-header">
+                    <span style="font-size:1.4em;">${getSportIcon(bet.sport)}</span>
+                    <span class="review-sport-badge">${bet.sport || '?'}</span>
+                    <span class="review-bm-badge">${bet.bookmaker || '?'}</span>
+                    <strong style="flex:1;font-size:0.95em;">${bet.name}</strong>
+                </div>
+                <div class="form-row-3" style="gap:10px;margin-bottom:10px;">
+                    <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.78em;">Nom du pari *</label>
+                        <input type="text" value="${(bet.name||'').replace(/"/g,'&quot;')}" oninput="updateReviewBet(${idx},'name',this.value)" style="font-size:0.88em;padding:8px 10px;"></div>
+                    <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.78em;">Match</label>
+                        <input type="text" value="${(bet.match||'').replace(/"/g,'&quot;')}" oninput="updateReviewBet(${idx},'match',this.value)" style="font-size:0.88em;padding:8px 10px;"></div>
+                    <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.78em;">Ligue</label>
+                        <input type="text" value="${(bet.league||'').replace(/"/g,'&quot;')}" oninput="updateReviewBet(${idx},'league',this.value)" style="font-size:0.88em;padding:8px 10px;"></div>
+                </div>
+                <div class="form-row" style="gap:10px;margin-bottom:10px;">
+                    <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.78em;">Sport</label>
+                        <select oninput="updateReviewBet(${idx},'sport',this.value)" style="font-size:0.88em;padding:8px 10px;">
+                            ${['Football','Basketball','Tennis','Rugby','MMA','Hockey','Baseball'].map(s => `<option value="${s}" ${s===bet.sport?'selected':''}>${getSportIcon(s)} ${s}</option>`).join('')}
+                        </select></div>
+                    <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.78em;">Bookmaker</label>
+                        <select oninput="updateReviewBet(${idx},'bookmaker',this.value)" style="font-size:0.88em;padding:8px 10px;">
+                            ${(bmKeys.length > 0 ? bmKeys : ['Betclic','Winamax','Unibet','PMU']).map(b => `<option value="${b}" ${b===bet.bookmaker?'selected':''}>${b}</option>`).join('')}
+                        </select></div>
+                    <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.78em;">Mise (€) *</label>
+                        <input type="number" step="0.01" value="${bet.amount||0}" oninput="updateReviewBet(${idx},'amount',parseFloat(this.value)||0)" style="font-size:0.88em;padding:8px 10px;"></div>
+                    <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.78em;">Cote *</label>
+                        <input type="number" step="0.01" value="${bet.odds||0}" oninput="updateReviewBet(${idx},'odds',parseFloat(this.value)||0)" style="font-size:0.88em;padding:8px 10px;"></div>
+                </div>
+                <div class="form-row" style="gap:10px;">
+                    <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.78em;">Date</label>
+                        <input type="date" value="${bet.date||''}" oninput="updateReviewBet(${idx},'date',this.value)" style="font-size:0.88em;padding:8px 10px;"></div>
+                    <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.78em;">Heure</label>
+                        <input type="time" value="${bet.time||''}" oninput="updateReviewBet(${idx},'time',this.value)" style="font-size:0.88em;padding:8px 10px;"></div>
+                    <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.78em;">Statut</label>
+                        <select oninput="updateReviewBet(${idx},'status',this.value)" style="font-size:0.88em;padding:8px 10px;">
+                            <option value="en-cours" ${bet.status==='en-cours'?'selected':''}>En cours</option>
+                            <option value="gagne" ${bet.status==='gagne'?'selected':''}>Gagné</option>
+                            <option value="perdu" ${bet.status==='perdu'?'selected':''}>Perdu</option>
+                        </select></div>
+                </div>
+            </div>`).join('')}`;
+}
+
+function toggleBetExclusion(idx) { reviewedBets[idx]._excluded = !reviewedBets[idx]._excluded; renderReviewCards(); }
+function updateReviewBet(idx, field, value) { reviewedBets[idx][field] = value; }
+
+async function saveReviewedBets() {
+    const toSave = reviewedBets.filter(b => !b._excluded);
+    if (toSave.length === 0) { await customConfirm('Aucun pari', 'Tous les paris ont été exclus.', 'ℹ️', 'OK', false); return; }
+    const br = getCurrentBankroll();
+    const today = new Date().toISOString().split('T')[0];
+    const nowTime = new Date().toTimeString().slice(0, 5);
+    toSave.forEach(bet => {
+        const dateStr = bet.date || today;
+        const timeStr = bet.time || nowTime;
+        br.bets.push({
+            id: Date.now() + Math.random(),
+            type: 'simple',
+            name: bet.name || 'Pari importé',
+            sport: bet.sport || 'Football',
+            league: bet.league || '-',
+            match: bet.match || '-',
+            amount: parseFloat(bet.amount) || 0,
+            odds: parseFloat(bet.odds) || 0,
+            confidence: 50,
+            status: bet.status || 'en-cours',
+            bookmaker: bet.bookmaker || '-',
+            date: dateStr + 'T' + timeStr + ':00'
+        });
+    });
+    updateBankrollAmount(br);
+    saveData();
+    closeModal('reviewModal');
+    screenshotFiles = [];
+    reviewedBets = [];
+    updateApp();
+    await customConfirm(`${toSave.length} pari${toSave.length > 1 ? 's' : ''} enregistré${toSave.length > 1 ? 's' : ''} !`, 'Les paris ont été ajoutés à votre bankroll.', '✅', 'Super !', false);
+}
+
 // ===================================
 // FIREBASE AUTH
 // ===================================
@@ -6715,6 +7232,8 @@ origNav.forEach(item => {
         }
     });
 });
+    
+
     </script>
 </body>
 </html>
